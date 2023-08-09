@@ -1,0 +1,66 @@
+{
+    "input_data":
+    {
+        "dirpath": ["mktdata","binance","test"],
+        "start_date": "2022-08-15T00:00:00",
+        "selected_instruments":
+        [
+            "BTCUSDT",
+            "ETHUSDT"
+        ]
+    },
+    "run_parameters":
+    {
+        "unit_test": true,
+        "no_normalize": ["sign", "big"],
+        "tx_cost": 0,
+        "models":
+        {
+            "performance": {
+                "LinearRegression": {"splits_for_1000": 0,
+                    "params": {}}
+            },
+            "sign": {
+                "LinearRegression": {"splits_for_1000": 0,
+                    "params": {}}
+            },
+            "big": {
+                "LinearRegression": {"splits_for_1000": 0,
+                    "params": {}}
+            }
+        }
+    },
+    "feature_map":
+    {
+        "close": {
+            "weight_by": "volume",
+            "ewma_windows": ["live", 15, 1440],
+            "vol_incr_window": [[1,60],[15, 4320]]},
+        "volume": {
+            "transform": "log",
+            "ewma_windows": [15]},
+        "taker_imbalance":
+        {
+            "transform": "arctanh",
+            "ewma_windows": []
+        },
+        "premium": {
+            "weight_by": "volume",
+            "ewma_windows": [15]}
+    },
+    "label_map":
+    {
+        "performance":
+        {
+            "horizons": [1]
+        },
+        "sign":
+        {
+            "horizons": [1]
+        },
+        "big":
+        {
+            "horizons": [1]
+        }
+    }
+}
