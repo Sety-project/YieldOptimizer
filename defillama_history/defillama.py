@@ -1,18 +1,14 @@
 #!/usr/bin/env python
-import functools
-import importlib
 import logging
 import numbers
 import os
 import sys
-import pickle
 import asyncio
 from copy import deepcopy
 from utils.async_utils import async_wrap, safe_gather
 from utils.io_utils import ignore_error
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 import pandas as pd
 from defillama2 import DefiLlama
 

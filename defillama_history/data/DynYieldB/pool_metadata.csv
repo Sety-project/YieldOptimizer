@@ -1,0 +1,5 @@
+pool,chain,project,symbol,tvlUsd,apyBase,apyReward,apy,rewardTokens,apyPct1D,apyPct7D,apyPct30D,stablecoin,ilRisk,exposure,poolMeta,mu,sigma,count,outlier,underlyingTokens,il7d,apyBase7d,apyMean30d,volumeUsd1d,volumeUsd7d,apyBaseInception,predictedClass,predictedProbability,binnedConfidence
+f0a283bc-55a2-4b09-bb85-28f7fde6f16d,BSC,alpaca-leveraged-yield-farming,IBBUSD,10682710,,,0.0,,0.0,0.0,0.0,True,no,single,,0.12848,0.00682,455,False,[],,,0.0,,,,,,
+a01b3fdd-9c16-4f6f-ade0-a14a5b1187f9,BSC,alpaca-leveraged-yield-farming,IBBTCB,8428968,,,0.0,,0.0,0.0,0.0,False,no,single,,0.3094,0.01692,455,False,[],,,0.0,,,,,,
+7e5c4afb-38fb-42ff-a033-19712c4e5911,BSC,alpaca-leveraged-yield-farming,IBBNB,8075628,,,0.0,,0.0,0.0,0.0,False,no,single,,0.082,0.0044,455,False,[],,,0.0,,,,,,
+8e7f84d9-7ee8-4c40-8c45-e622b16d3c4f,BSC,alpaca-leveraged-yield-farming,IBUSDT,6430267,,,0.0,,0.0,0.0,0.0,True,no,single,,0.10367,0.00531,455,False,[],,,0.0,,,,,,
