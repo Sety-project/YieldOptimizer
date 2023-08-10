@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 from utils.async_utils import async_wrap
+import functools
+import retry
+import logging
 import json
 import pandas as pd
 import numpy as np
@@ -23,6 +26,17 @@ def to_csv(*args,**kwargs):
 async def async_to_csv(*args,**kwargs):
     coro = async_wrap(to_csv)
     return await coro(*args,**kwargs)
+
+@retry.retry(exceptions=ConnectionError, tries=3, delay=1,backoff=2)
+def ignore_error(func):
+    @functools.wraps(func)
+    async def wrapper_ignore_error(*args, **kwargs):
+        try:
+            return await func(*args, **kwargs)
+        except Exception as e:
+            logger = logging.getLogger(func.__module__.split('.')[0])
+            logger.warning(f'{e} running {str(func)} {args}{kwargs}', exc_info=False)
+    return wrapper_ignore_error
 
 class NpEncoder(json.JSONEncoder):
     def default(self, obj):
