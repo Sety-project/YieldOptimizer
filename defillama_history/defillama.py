@@ -12,7 +12,6 @@ from abc import abstractmethod
 import pandas as pd
 from defillama2 import DefiLlama
 
-
 class FilteredDefiLlama(DefiLlama):
     '''
     filters protocols and pools from defillama
@@ -62,7 +61,7 @@ class FilteredDefiLlama(DefiLlama):
 
         apyReward = pool_history['apyReward']
 
-        reward_discount = 0
+        reward_discount = pd.Series(0, index=apyReward.index)
         if kwargs is not None and 'reward_history' in kwargs:
             if metadata['rewardTokens'] not in [None, []]:
                 token_addrs_n_chains = {rewardToken: metadata['chain'] for rewardToken in metadata['rewardTokens']}
@@ -72,7 +71,10 @@ class FilteredDefiLlama(DefiLlama):
         il = pool_history['il7d'].fillna(0) * 52
         tvl = pool_history['tvlUsd']
 
-        haircut_apy = apy - reward_discount * apyReward.fillna(0) - il.fillna(0)
+        # align discount function to apyReward
+        interpolated_discount = reward_discount.reindex(apyReward.index.union(reward_discount.index)).interpolate().loc[apyReward.index]
+        apyReward = apyReward.interpolate(method='linear').fillna(0)
+        haircut_apy = apy - (1-interpolated_discount) * apyReward
 
         result = pd.DataFrame({'haircut_apy': haircut_apy,
                 'apy': apy,
@@ -82,12 +84,12 @@ class FilteredDefiLlama(DefiLlama):
 
         if 'dirname' in kwargs:
             name = os.path.join(kwargs['dirname'], '{}.csv'.format(metadata['pool']))
-            result.to_csv(name, mode='w', header=not os.path.isfile(name))
+            result.to_csv(name, mode='w')
 
         return result
 
     @ignore_error
-    async def discount_reward_by_minmax(self, token_addrs_n_chains, **kwargs) -> pd.DataFrame:
+    async def discount_reward_by_minmax(self, token_addrs_n_chains, **kwargs) -> pd.Series:
         kwargs_reward_history = deepcopy(kwargs['reward_history'])
         discount_lookback = kwargs_reward_history.pop('discount_lookback')
 
@@ -98,9 +100,9 @@ class FilteredDefiLlama(DefiLlama):
         for rewardToken in reward_history.columns:
             # need to clean defillama data
             token_history = reward_history[rewardToken].dropna()
-            # discount by 30d max-min
-            reward_discount[rewardToken] = 1 - token_history.rolling(discount_lookback).apply(
-                lambda x: (max(x) - min(x))) / token_history
+            # discount by min/max, so that if discounted(max)=min, discounted(min)=min^2/max<min, etc...
+            reward_discount[rewardToken] = token_history.rolling(discount_lookback).apply(
+                lambda x: min(x) / max(x))
         # defillama doesnt breakdown rewards so take the min...
         reward_discount = reward_discount.min(axis=1)
         return reward_discount
@@ -112,20 +114,20 @@ class FilteredDefiLlama(DefiLlama):
             if x is not None else None)
         return pools
 
-    def all_apy_history(self, **kwargs) -> pd.DataFrame:
-        metadata = [x.to_dict() for _, x in self.pools.iterrows()]
-        coros = [self.apy_history(meta, **kwargs) for meta in metadata]
-        data = asyncio.run(safe_gather(coros))
+    def all_apy_history(self, **kwargs) -> dict[str, pd.DataFrame]:
+            metadata = [x.to_dict() for _, x in self.pools.iterrows()]
+            coros = [self.apy_history(meta, **kwargs) for meta in metadata]
+            data = asyncio.run(safe_gather(coros))
 
-        if 'dirname' in kwargs:
-            filename = os.path.join(kwargs['dirname'], 'pool_metadata.csv')
-            pd.DataFrame(metadata).set_index('pool').to_csv(filename, mode='w')
+            if 'dirname' in kwargs:
+                filename = os.path.join(kwargs['dirname'], 'pool_metadata.csv')
+                pd.DataFrame(metadata).set_index('pool').to_csv(filename, mode='w')
 
-        return pd.DataFrame({key['pool']: value['haircut_apy'] for key, value in zip(metadata, data)})
+            return {key['pool']: value for key, value in zip(metadata, data)}
 
 
-class DynLiq(FilteredDefiLlama):
-    '''DynLiq is a class that filters pools and
+class DynLst(FilteredDefiLlama):
+    '''DynLst is a class that filters pools and
     stores the historical apy of the pool and the historical apy of the underlying tokens
     '''
     def __init__(self, *args, **kwargs):
@@ -212,7 +214,7 @@ class DynLiq(FilteredDefiLlama):
 
         return result
 class DynYieldE(FilteredDefiLlama):
-    '''DynLiq is a class that filters pools and
+    '''DynLst is a class that filters pools and
     stores the historical apy of the pool and the historical apy of the underlying tokens
     '''
     # shortlisted_tokens_tier2 = {
@@ -225,20 +227,21 @@ class DynYieldE(FilteredDefiLlama):
 
     def filter_underlyings(self) -> dict:
         return {'USDC': '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
-                                   'USDT': '0xdac17f958d2ee523a2206206994597c13d831ec7',
-                                   'DAI': '0x6b175474e89094c44da98b954eedeac495271d0f',
-                                   'BUSD': '0x4fabb145d64652a948d72533023f6e7a623c7c53',
-                                   'FRAX': '0x853d955acef822db058eb8505911ed77f175b99e',
-                                   'LUSD': '0x5f98805a4e8be255a32880fdec7f6728c6568ba0',
-                                   'FRAXBP': '0x3175df0976dfa876431c2e9ee6bc45b65d3473cc',
-                                   '3CRV': '0x6c3f90f043a72fa612cbac8115ee7e52bde6e490',
-                                   'sDAI': '0x83f20f44975d03b1b09e64809b757c47f942beea',
-                                   'aUSDC': '0xbcca60bb61934080951369a648fb03df4f96263c',
-                                   'aUSDT': '0x3ed3b47dd13ec9a98b44e6204a523e766b225811',
-                                   'aDAI': '0x028171bca77440897b824ca71d1c56cac55b68a3',
-                                   'cUSDC': '0x39aa39c021dfbae8fac545936693ac917d5e7563',
-                                   'cUSDT': '0xf650c3d88d12db855b8bf7d11be6c55a4e07dcc9',
-                                   'cDAI': '0x5d3a536e4d6dbd6114cc1ead35777bab948e3643'}
+                'USDT': '0xdac17f958d2ee523a2206206994597c13d831ec7',
+                'DAI': '0x6b175474e89094c44da98b954eedeac495271d0f',
+                'BUSD': '0x4fabb145d64652a948d72533023f6e7a623c7c53',
+                'FRAX': '0x853d955acef822db058eb8505911ed77f175b99e',
+                'LUSD': '0x5f98805a4e8be255a32880fdec7f6728c6568ba0',
+                'BLUSD': '0xb9d7dddca9a4ac480991865efef82e01273f79c3',
+                'FRAXBP': '0x3175df0976dfa876431c2e9ee6bc45b65d3473cc',
+                '3CRV': '0x6c3f90f043a72fa612cbac8115ee7e52bde6e490',
+                'sDAI': '0x83f20f44975d03b1b09e64809b757c47f942beea',
+                'aUSDC': '0xbcca60bb61934080951369a648fb03df4f96263c',
+                'aUSDT': '0x3ed3b47dd13ec9a98b44e6204a523e766b225811',
+                'aDAI': '0x028171bca77440897b824ca71d1c56cac55b68a3',
+                'cUSDC': '0x39aa39c021dfbae8fac545936693ac917d5e7563',
+                'cUSDT': '0xf650c3d88d12db855b8bf7d11be6c55a4e07dcc9',
+                'cDAI': '0x5d3a536e4d6dbd6114cc1ead35777bab948e3643'}
 
     def filter_pools(self, pools) -> pd.DataFrame:
         # shortlist pools
@@ -257,7 +260,7 @@ class DynYieldE(FilteredDefiLlama):
 
 
 class DynYieldB(FilteredDefiLlama):
-    '''DynLiq is a class that filters pools and
+    '''DynLst is a class that filters pools and
     stores the historical apy of the pool and the historical apy of the underlying tokens
     '''
     # shortlisted_tokens_tier2 = {
@@ -269,21 +272,10 @@ class DynYieldB(FilteredDefiLlama):
     # }
 
     def filter_underlyings(self) -> dict:
-        return {'USDC': '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
-                                   'USDT': '0xdac17f958d2ee523a2206206994597c13d831ec7',
-                                   'DAI': '0x6b175474e89094c44da98b954eedeac495271d0f',
-                                   'BUSD': '0x4fabb145d64652a948d72533023f6e7a623c7c53',
-                                   'FRAX': '0x853d955acef822db058eb8505911ed77f175b99e',
-                                   'LUSD': '0x5f98805a4e8be255a32880fdec7f6728c6568ba0',
-                                   'FRAXBP': '0x3175df0976dfa876431c2e9ee6bc45b65d3473cc',
-                                   '3CRV': '0x6c3f90f043a72fa612cbac8115ee7e52bde6e490',
-                                   'sDAI': '0x83f20f44975d03b1b09e64809b757c47f942beea',
-                                   'aUSDC': '0xbcca60bb61934080951369a648fb03df4f96263c',
-                                   'aUSDT': '0x3ed3b47dd13ec9a98b44e6204a523e766b225811',
-                                   'aDAI': '0x028171bca77440897b824ca71d1c56cac55b68a3',
-                                   'cUSDC': '0x39aa39c021dfbae8fac545936693ac917d5e7563',
-                                   'cUSDT': '0xf650c3d88d12db855b8bf7d11be6c55a4e07dcc9',
-                                   'cDAI': '0x5d3a536e4d6dbd6114cc1ead35777bab948e3643'}
+        return {'USDC': '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d',
+                'USDT': '0x55d398326f99059ff775485246999027b3197955',
+                'DAI': '0x1af3f329e8be154074d8769d1ffa4ee058b1dbc3',
+                'BUSD': '0xe9e7cea3dedca5984780bafc599bd69add087d56',}
 
     def filter_pools(self, pools) -> pd.DataFrame:
         # shortlist pools
@@ -293,7 +285,7 @@ class DynYieldB(FilteredDefiLlama):
             'underlyingTokens': lambda x: all(
                 token.lower() in self.shortlisted_tokens.values() for token in x) if isinstance(x,
                                                                                            list) else False,
-            'tvlUsd': lambda x: x > 3e6,
+            'tvlUsd': lambda x: x > 1e6,
             #    'ilRisk': lambda x: not x == 'yes',
             #    'exposure': lambda x: x in ['single', 'multi'], # ignore
             #    'apyMean30d': lambda x: x>4
@@ -305,11 +297,48 @@ class DynYieldB(FilteredDefiLlama):
 main code
 '''
 
+
+def compute_moments(apy: dict[str, pd.Series]) -> dict[str, pd.Series]:
+    new_apy: dict() = dict()
+    for name, df in apy.items():
+        # apply apy cutoff date and cap 200%
+        df = df[df.index < datetime.now().replace(tzinfo=timezone.utc)]
+        df = df.applymap(lambda x: min(x, 200))
+        # hack for data gaps...
+        # df = df.fillna(method='ffill', limit=1)
+
+        # compute moments
+        df = df.ewm(halflife=timedelta(days=7), times=df.index).mean()
+
+        new_apy |= {name: df}
+    return new_apy
+
+def get_historical_best_pools(apy: dict[str, pd.Series], max_rank: int, start: datetime, end: datetime) -> pd.DataFrame:
+    # compute historical pool rank
+    apy_haircut_apy = pd.DataFrame({key: value['haircut_apy'] for key, value in apy.items()})
+    df = pd.DataFrame(apy_haircut_apy).fillna(method='ffill')
+    df = df[(df.index >= start)&(df.index <= end)]
+    best_only = df[df.rank(axis=1, ascending=False)<max_rank]
+    return best_only.dropna(how='all', axis=1)
+
+def print_top_pools(new_apy: dict[str,pd.DataFrame]) -> pd.DataFrame:
+    # compute top pools
+    verbose_index = defillama.pools[['project', 'symbol', 'pool']].set_index('pool')
+    top_pools = pd.DataFrame({tuple([key]+verbose_index.loc[key].to_list()): value.iloc[-1] for key, value in new_apy.items()})
+    top_pools = top_pools.T.sort_values(by='haircut_apy',ascending=False)
+    # save to excel
+    try:
+        with pd.ExcelWriter('defillama_hist.xlsx', engine='openpyxl', mode='a') as writer:
+            top_pools.to_excel(writer, datetime.now().strftime(f"{sys.argv[2]} %d %m %Y %H_%M_%S"))
+    except PermissionError:
+        print('Please close the excel file')
+    return top_pools
+
 if __name__ == '__main__':
     if sys.argv[1] == 'defillama':
         # Create a DefiLlama instance
-        if sys.argv[2] == 'DynLiq':
-            defillama = DynLiq()
+        if sys.argv[2] == 'DynLst':
+            defillama = DynLst()
         elif sys.argv[2] == 'DynYieldE':
             defillama = DynYieldE()
         elif sys.argv[2] == 'DynYieldB':
@@ -320,35 +349,25 @@ if __name__ == '__main__':
         if not os.path.isdir(dirname):
             os.makedirs(dirname)
         date_format = '%Y-%m-%d %H:%M:%S %Z'
+        end = datetime.now().replace(tzinfo=timezone.utc)
+        start = end - timedelta(days=90)
         history_kwargs = {'dirname': dirname,
                           'reward_history':
-                              {'discount_lookback': timedelta(days=30),
-                               'end': datetime(2023, 7, 30, tzinfo=timezone.utc).strftime(date_format),
+                              {'discount_lookback': timedelta(days=90),
+                               'end': end.strftime(date_format),
                                'end_format': date_format,
-                               'span': 180,
+                               'span': 700,
                                'period': '1d'}
                           }
 
         # fetch everything asynchronously
         keys = defillama.pools['pool'].tolist()
         coros = [defillama.apy_history(x, **history_kwargs) for _, x in defillama.pools.iterrows()]
-        apy = defillama.all_apy_history(**history_kwargs)
-        # apply apy cutoff date and cap 200%
-        apy = apy[apy.index < datetime.now().replace(tzinfo=timezone.utc)]
-        apy = apy.applymap(lambda x: min(x, 200))
+        all_history = defillama.all_apy_history(**history_kwargs)
 
-        # compute moments
-        ewm_df = apy.ewm(halflife=timedelta(days=7), times=apy.index)
-
-        # compute top pools
-        top_pools = defillama.pools[['project', 'symbol', 'pool', 'tvlUsd']].set_index('pool').join(ewm_df.mean().iloc[-1])
-        top_pools.rename(columns={top_pools.columns[-1]: '7d avg discounted apy'}, inplace=True)
-        top_pools = top_pools[top_pools['7d avg discounted apy']].sort_values('7d avg discounted apy', ascending=False)
-
-        # save to excel
-        try:
-            with pd.ExcelWriter('defillama_hist.xlsx', engine='openpyxl', mode='a') as writer:
-                top_pools.to_excel(writer, datetime.now().strftime(f"{sys.argv[2]} %d %m %Y %H_%M_%S"))
-        except PermissionError:
-            print('Please close the excel file')
-            exit(0)
+        apy = compute_moments(all_history)
+        top_pools = print_top_pools(apy)
+        historical_best_pools = get_historical_best_pools(apy, 10, start, end).resample('d').apply('mean')
+        mean_best_history = historical_best_pools.mean(axis=1)
+        ever_been_top = defillama.pools[defillama.pools['pool'].isin(historical_best_pools.columns)]
+        print('done')

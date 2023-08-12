@@ -27,7 +27,7 @@ async def async_to_csv(*args,**kwargs):
     coro = async_wrap(to_csv)
     return await coro(*args,**kwargs)
 
-@retry.retry(exceptions=ConnectionError, tries=3, delay=1,backoff=2)
+@retry.retry(exceptions=Exception, tries=3, delay=1,backoff=2)
 def ignore_error(func):
     @functools.wraps(func)
     async def wrapper_ignore_error(*args, **kwargs):
