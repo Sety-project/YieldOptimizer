@@ -32,8 +32,17 @@ class FilteredDefiLlama(DefiLlama):
 
     def filter_protocols(self, protocols, **kwargs) -> pd.DataFrame:
         '''filter protocols'''
-        excluded_categories = ['NFT Lending', 'NFT Marketplace']
-        excluded_protocols = ['uwu-lend', 'sturdy', 'goldfinch', 'ribbon', 'idle', 'ipor', 'notional', 'merkl', 'asymetrix-protocol']
+        excluded_categories = ['NFT Lending',
+                               'NFT Marketplace']
+        excluded_protocols = ['uwu-lend',
+                              'sturdy',
+                              'goldfinch',
+                              'ribbon',
+                              'idle',
+                              'ipor',
+                              'notional',
+                              'merkl',
+                              'asymetrix-protocol']
         protocol_filters = {
             #    'chain': lambda x: x in ['Ethereum','Multi-Chain'],
             'name': lambda x: x not in excluded_protocols,
@@ -42,6 +51,7 @@ class FilteredDefiLlama(DefiLlama):
             #    'listedAt': lambda x: not x>datetime(2023,3,1).timestamp()*1000, # 1mar23
             #    'tvl': lambda x: x>10e6,
             'openSource': lambda x: not x == False,
+            # 'audited': lambda x: not is in ['1','2','3'],
             #    'wrongLiquidity': lambda x: x==True,
             #    'rugged': lambda x: x==True,
         }
@@ -80,11 +90,11 @@ class FilteredDefiLlama(DefiLlama):
                 'apy': apy,
                 'apyReward': apyReward,
                 'il': il,
-                'tvl': tvl})
+                'tvl': tvl})/100
 
         if 'dirname' in kwargs:
-            name = os.path.join(kwargs['dirname'], '{}.csv'.format(metadata['pool']))
-            result.to_csv(name, mode='w')
+            name = os.path.join(os.sep, kwargs['dirname'], '{}.csv'.format(metadata['pool']))
+            result.to_csv(name, mode='w', header=True)
 
         return result
 
@@ -119,8 +129,9 @@ class FilteredDefiLlama(DefiLlama):
             coros = [self.apy_history(meta, **kwargs) for meta in metadata]
             data = asyncio.run(safe_gather(coros))
 
+            # print pool meta in parent dir
             if 'dirname' in kwargs:
-                filename = os.path.join(kwargs['dirname'], 'pool_metadata.csv')
+                filename = os.path.join(os.sep, os.getcwd(), 'data', f'{self.__class__.__name__}_pool_metadata.csv')
                 pd.DataFrame(metadata).set_index('pool').to_csv(filename, mode='w')
 
             return {key['pool']: value for key, value in zip(metadata, data)}
@@ -208,10 +219,6 @@ class DynLst(FilteredDefiLlama):
         # TODO: it depends :(
         #  result['haircut_apy'] += apy_underlyings
 
-        if 'dirname' in kwargs:
-            name = os.path.join(kwargs['dirname'], '{}.csv'.format(metadata['pool']))
-            result.to_csv(name, mode='w', header=not os.path.isfile(name))
-
         return result
 class DynYieldE(FilteredDefiLlama):
     '''DynLst is a class that filters pools and
@@ -236,6 +243,8 @@ class DynYieldE(FilteredDefiLlama):
                 'FRAXBP': '0x3175df0976dfa876431c2e9ee6bc45b65d3473cc',
                 '3CRV': '0x6c3f90f043a72fa612cbac8115ee7e52bde6e490',
                 'sDAI': '0x83f20f44975d03b1b09e64809b757c47f942beea',
+                'MIM': '0x99d8a9c45b2eca8864373a26d1459e3dff1e17f3',
+                'crvUSD': '0x8092ac8f4fe9e147098632482598f5855b25ee2f',
                 'aUSDC': '0xbcca60bb61934080951369a648fb03df4f96263c',
                 'aUSDT': '0x3ed3b47dd13ec9a98b44e6204a523e766b225811',
                 'aDAI': '0x028171bca77440897b824ca71d1c56cac55b68a3',
@@ -345,7 +354,7 @@ if __name__ == '__main__':
             defillama = DynYieldB()
 
         # prepare history arguments
-        dirname = os.path.join(os.getcwd(), 'data', sys.argv[2])
+        dirname = os.path.join(os.sep, os.getcwd(), 'data', sys.argv[2])
         if not os.path.isdir(dirname):
             os.makedirs(dirname)
         date_format = '%Y-%m-%d %H:%M:%S %Z'
