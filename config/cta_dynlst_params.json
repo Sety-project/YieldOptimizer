@@ -67,7 +67,11 @@
     },
     "strategy": {
         "haflife": "7d",
-        "cost": [0.001]
+        "cost": [0.001],
+        "assumed_holding_yrs": 0.02,
+        "verbose": "logs",
+        "warm_start": "True",
+        "finite_diff_rel_step": 1e-2
     },
     "backtest": {
         "start_date": "2023-04-15T00:00:00",

@@ -115,12 +115,15 @@ class TrivialEwmPredictor:
         self.halflife = pd.Timedelta(halflife)
         self.distribution: multivariate_normal = None
     def fit(self, X, y=None) -> None:
-        mean = X.ewm(times=X.index, halflife=self.halflife).mean()
-        if X.shape[0] > 1:
-            cov = X.ewm(times=X.index, halflife=self.halflife).cov()
+        decayed_X = X.mul(pd.Series(index=X.index,data=np.exp(-(X.index[-1] - X.index).total_seconds() / self.halflife.total_seconds())),
+                          axis=0)
+        mean = decayed_X.mean().squeeze().values
+        if decayed_X.shape[0] > 1:
+            #TODO: cov doesn't return a posdef matrix
+            cov = np.identity(decayed_X.shape[1]) # nearestPD(decayed_X.cov().values)
         else:
-            cov = pd.DataFrame(np.identity(X.shape[1]))
-        self.distribution = multivariate_normal(mean=mean.squeeze().values, cov=cov.values)
+            cov = np.identity(decayed_X.shape[1])
+        self.distribution = multivariate_normal(mean=mean, cov=cov)
 
 class ResearchEngine:
     def __init__(self, feature_map, label_map, run_parameters, input_data,**paramsNOTUSED):
