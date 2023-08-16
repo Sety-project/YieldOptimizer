@@ -1,11 +1,18 @@
 import os
+import logging
 import pandas as pd
 import numpy as np
 import sklearn
 
-class Strategy:
+class SingleAssetStrategy:
+    '''
+    This is for cta
+    TODO: adopt the 'next' architecture from backtesting.py
+    '''
+
     def __init__(self, params: dict):
         self.parameters = params
+
     def run(self, features: pd.DataFrame, fitted_model: sklearn.base.BaseEstimator) -> pd.Series:
         '''
         converts a prediction into a delta (eg take position above proba_threshold proba, up to max_leverage for 100% proba)

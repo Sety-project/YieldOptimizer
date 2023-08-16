@@ -3,11 +3,11 @@ from typing import Union
 from datetime import timedelta
 import numpy as np
 import pandas as pd
-from cta.strategy import Strategy
-from cta.research_engine import ResearchEngine
+from strategies.cta_strategy import SingleAssetStrategy
+from strategies.research_engine import ResearchEngine
 
 class BacktestEngine:
-    def __init__(self, params: dict, delta_strategy: Strategy):
+    def __init__(self, params: dict, delta_strategy: SingleAssetStrategy):
         self.parameters = params
         self.delta_strategy = delta_strategy
 
