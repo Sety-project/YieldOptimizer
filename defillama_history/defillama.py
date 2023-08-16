@@ -6,7 +6,7 @@ import sys
 import asyncio
 from copy import deepcopy
 from utils.async_utils import async_wrap, safe_gather
-from utils.io_utils import ignore_error
+from utils.io_utils import ignore_error, async_to_csv
 from datetime import datetime, timedelta, timezone
 from abc import abstractmethod
 import pandas as pd
@@ -93,10 +93,13 @@ class FilteredDefiLlama(DefiLlama):
                 'tvl': tvl})/100
 
         if 'dirname' in kwargs:
-            name = os.path.join(os.sep, kwargs['dirname'], '{}.csv'.format(metadata['pool']))
-            result.to_csv(name, mode='w', header=True)
+            await self.write_history(kwargs, metadata, result)
 
         return result
+
+    async def write_history(self, kwargs, metadata, result):
+        name = os.path.join(os.sep, kwargs['dirname'], '{}.csv'.format(metadata['pool']))
+        await async_to_csv(result, name, mode='w', header=True)
 
     @ignore_error
     async def discount_reward_by_minmax(self, token_addrs_n_chains, **kwargs) -> pd.Series:
@@ -207,6 +210,7 @@ class DynLst(FilteredDefiLlama):
         return result
 
     async def apy_history(self, metadata: dict, **kwargs) -> dict[str, pd.DataFrame]:
+        '''gets various components of apy history from defillama'''
         dont_write_kwargs = deepcopy(kwargs)
         dont_write_kwargs.__delitem__('dirname')
         result = await super().apy_history(metadata, **dont_write_kwargs)
@@ -218,6 +222,9 @@ class DynLst(FilteredDefiLlama):
         result['underlying_apy'] = apy_underlyings
         # TODO: it depends :(
         #  result['haircut_apy'] += apy_underlyings
+
+        if 'dirname' in kwargs:
+            await self.write_history(kwargs, metadata, result)
 
         return result
 class DynYieldE(FilteredDefiLlama):
