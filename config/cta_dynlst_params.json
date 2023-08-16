@@ -18,16 +18,11 @@
         "unit_test": false,
         "groupby": false,
         "cross_ewma": false,
-        "tx_cost": 0,
-        "delta_strategy": {"type": "threshold_leverage", "params": {
-            "expectation_threshold": 1, "max_leverage": 20}
-        },
         "models": {
             "quantized_zscore": {
-                "RandomForestClassifier": {"splits_for_1000": 1,
-                    "params": {"min_samples_split": 10,
-                    "n_jobs": -1,
-                    "warm_start": false}}
+                "TrivialEwmPredictor": {
+                    "params": {"halflife": "7d"}
+                }
             }
         }
     },
@@ -69,5 +64,13 @@
                 "stable": [-0.5,0.5],
                 "up": [0.5,999]}
         }
+    },
+    "strategy": {
+        "haflife": "7d",
+        "cost": [0.001]
+    },
+    "backtest": {
+        "start_date": "2023-04-15T00:00:00",
+        "end_date": "2023-07-15T00:00:00"
     }
 }
