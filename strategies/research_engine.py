@@ -13,6 +13,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier # so that supported models appear in globals()
 
+from scipy.stats import multivariate_normal
+
 # import shap
 Instrument = NewType("Instrument", str)  # eg 'ETHUSDT for binance, or cvxETHSTETH for defillama
 FileData = NewType("Data", dict[Instrument, pd.DataFrame])
@@ -108,12 +110,19 @@ def winning_trade(log_perf: pd.Series,
                      name='winning_trade',
                      data=trade_outcome)
 
-class ResearchEngine:
-    data_interval = timedelta(seconds=60)
-    execution_lag = 1
-    stdev_quantum = 1.5
-    stdev_cap = 3
+class TrivialEwmPredictor:
+    def __init__(self, halflife: str):
+        self.halflife = pd.Timedelta(halflife)
+        self.distribution: multivariate_normal = None
+    def fit(self, X, y=None) -> None:
+        mean = X.ewm(times=X.index, halflife=self.halflife).mean()
+        if X.shape[0] > 1:
+            cov = X.ewm(times=X.index, halflife=self.halflife).cov()
+        else:
+            cov = pd.DataFrame(np.identity(X.shape[1]))
+        self.distribution = multivariate_normal(mean=mean.squeeze().values, cov=cov.values)
 
+class ResearchEngine:
     def __init__(self, feature_map, label_map, run_parameters, input_data,**paramsNOTUSED):
         self.feature_map = feature_map
         self.label_map = label_map
@@ -222,7 +231,7 @@ class ResearchEngine:
         for window in all_windows:
             # weighted mean = mean of weight*temp / mean of weigths
             data = weighted_ew_mean(data_dict[(instrument, raw_feature)],
-                                    halflife=window * ResearchEngine.data_interval,
+                                    halflife=window * self.data_interval,
                                     weights=weights)
             if 'quantiles' in params:
                 data = data.rolling(5*window).rank(pct=True)
@@ -298,7 +307,7 @@ class ResearchEngine:
             # weigthed std  = weighted mean of squares - square of weighted mean
             temp = weighted_ew_vol(data_dict[(instrument, raw_feature)],
                                    increment=increment_window[0],
-                                   halflife=increment_window[1] * ResearchEngine.data_interval,
+                                   halflife=increment_window[1] * self.data_interval,
                                    weights=weights)
             if 'quantiles' in params:
                 temp = temp.rolling(5*increment_window[1]).rank(pct=True)
@@ -365,6 +374,12 @@ class ResearchEngine:
 
 
 class BinanceExtremeResearchEngine(ResearchEngine):
+    data_interval = timedelta(seconds=60)
+    execution_lag = 1
+    stdev_quantum = 1.5
+    stdev_cap = 3
+
+
     @staticmethod
     def read_data(dirpath,
                   start_date,
@@ -418,7 +433,7 @@ class BinanceExtremeResearchEngine(ResearchEngine):
 
             performance = pd.Series(index=instrument_df.index,
                                     data=StandardScaler().fit_transform(pd.DataFrame((instrument_df * weights).sum(axis=1)))[:, 0])
-            performance *= target_vol * np.sqrt(ResearchEngine.data_interval.total_seconds() / timedelta(days=365.25).total_seconds())
+            performance *= target_vol * np.sqrt(self.data_interval.total_seconds() / timedelta(days=365.25).total_seconds())
 
             for label, label_data in self.label_map.items():
                 for horizon in label_data['horizons']:
@@ -488,6 +503,9 @@ class BinanceExtremeResearchEngine(ResearchEngine):
 
 
 class DefillamaResearchEngine(ResearchEngine):
+    data_interval = timedelta(days=1)
+    execution_lag = 0
+
     @staticmethod
     def read_data(dirpath, start_date, selected_instruments: list[Instrument]) -> FileData:
         file_data: FileData = FileData(dict())
@@ -529,8 +547,14 @@ class DefillamaResearchEngine(ResearchEngine):
         return result
 
     def fit(self):
-        raise NotImplementedError
-
+        # for each (all instruments, 1 feature, 1 horizon)...
+        for (raw_feature, frequency), label_df in self.Y.groupby(level=['feature', 'window'], axis=1):
+            # for each model for that feature...
+            if raw_feature not in self.run_parameters['models']:
+                continue
+            for model_name, model_params in self.run_parameters['models'][raw_feature].items():
+                fitted_model = TrivialEwmPredictor(**model_params['params'])
+                self.fitted_model[(raw_feature, frequency, model_name, 0)] = fitted_model
 
 def model_analysis(engine: ResearchEngine):
     feature_list=list(engine.X.xs(engine.input_data['selected_instruments'][0], level='instrument', axis=1).columns)
