@@ -12,6 +12,7 @@ from scipy.interpolate import CubicSpline
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier # so that supported models appear in globals()
+from sklearn.covariance._robust_covariance import MinCovDet
 
 from scipy.stats import multivariate_normal
 
@@ -114,16 +115,28 @@ class TrivialEwmPredictor:
     def __init__(self, halflife: str):
         self.halflife = pd.Timedelta(halflife)
         self.distribution: multivariate_normal = None
-    def fit(self, X, y=None) -> None:
+    def fit(self, raw_X, y=None) -> None:
+        '''
+        mere gaussian distribution, but we exclude spikes
+        '''
+        X = raw_X
         decayed_X = X.mul(pd.Series(index=X.index,data=np.exp(-(X.index[-1] - X.index).total_seconds() / self.halflife.total_seconds())),
                           axis=0)
-        mean = decayed_X.mean().squeeze().values
-        if decayed_X.shape[0] > 1:
-            #TODO: cov doesn't return a posdef matrix
-            cov = np.identity(decayed_X.shape[1]) # nearestPD(decayed_X.cov().values)
+        if raw_X.shape[0] > 1:
+            if False:
+                #TODO: remove outliers and interpolate them
+                outlier_remover = MinCovDet().fit(raw_X)
+                # decayed_X[~outlier_remover.support_] = np.nan
+                # decayed_X = decayed_X.interpolate(method='linear')
+                mean = outlier_remover.location_
+                cov = outlier_remover.covariance_
+            else: # just cap at 20%
+                mean = decayed_X.applymap(lambda x: min(x,0.2)).mean()
+                cov = decayed_X.applymap(lambda x: min(x,0.2)).cov()
         else:
-            cov = np.identity(decayed_X.shape[1])
-        self.distribution = multivariate_normal(mean=mean, cov=cov)
+            mean = decayed_X.squeeze().values
+            cov = np.identity(raw_X.shape[1])
+        self.distribution = multivariate_normal(mean=mean, cov=cov, allow_singular=True)
 
 class ResearchEngine:
     def __init__(self, feature_map, label_map, run_parameters, input_data,**paramsNOTUSED):
