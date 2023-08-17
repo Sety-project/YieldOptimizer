@@ -93,7 +93,7 @@ class YieldStrategy(VaultRebalancingStrategy):
         self.fitted_model = fitted_model
 
         self.index: datetime = self.features.index[0]
-        self.state: State = State(weights=np.zeros(features.shape[1]), wealth=1.0)
+        self.state: State = State(weights=np.zeros(features.shape[1]), wealth=self.parameters['initial_wealth'])
 
         if 'cost' in params:
             self.transaction_cost = TransactionCostThroughBase({
@@ -126,41 +126,38 @@ class YieldStrategy(VaultRebalancingStrategy):
 
         # --------- verbose callback function: breaks down pnl during optimization
         def callbackF(x, print_with_flag=None):
-            if print_with_flag is not None:
-                progress_display = pd.DataFrame(pd.concat([
-                    pd.Series({
-                        'predicted_apys': np.dot(x, predicted_apys),
-                        'tx_cost': self.transaction_cost(self.state.weights, x),
-                        'wealth_constraint': constraints[0]['fun'](x),
-                        'success': print_with_flag
-                    }),
-                    pd.Series(x)
-                ]))  # used .append
-                pfoptimizer_path = os.path.join(os.sep, os.getcwd(), "logs")
-                if not os.path.exists(pfoptimizer_path):
-                    os.umask(0)
-                    os.makedirs(pfoptimizer_path, mode=0o777)
-                global run_date
-                pfoptimizer_filename = os.path.join(pfoptimizer_path, "{}_paths.csv".format(run_date.strftime("%Y%m%d-%H%M%S")))
-                progress_display.T.to_csv(pfoptimizer_filename,
-                                                           mode='a',
-                                                           header=not os.path.exists(pfoptimizer_filename))
+            progress_display = pd.DataFrame(pd.concat([
+                pd.Series({
+                    'predicted_apy': np.dot(x, predicted_apys),
+                    'tx_cost': self.transaction_cost(self.state.weights, x),
+                    'wealth_constraint': constraints[0]['fun'](x),
+                    'success': print_with_flag
+                }),
+                pd.Series({f'weight_{i}':value for i, value in enumerate(x)}),
+                pd.Series({f'apy_{i}':value for i, value in enumerate(predicted_apys)})
+            ]))  # used .append
+            pfoptimizer_path = os.path.join(os.sep, os.getcwd(), "logs")
+            if not os.path.exists(pfoptimizer_path):
+                os.umask(0)
+                os.makedirs(pfoptimizer_path, mode=0o777)
+            global run_date
+            pfoptimizer_filename = os.path.join(pfoptimizer_path, "{}_backtest.csv".format(run_date.strftime("%Y%m%d-%H%M%S")))
+            progress_display.to_csv(pfoptimizer_filename, mode='w')
             return []
 
-        if 'warm_start' in self.parameters:
+        if 'warm_start' in self.parameters and self.parameters['warm_start']:
             x1 = self.state.weights
         else:
             x1 = np.zeros(len(self.state.weights))
 
-        if 'verbose' in self.parameters:
+        if 'verbose' in self.parameters and self.parameters['verbose'] == 'interim':
             callbackF(x1, 'initial')
 
         finite_diff_rel_step = self.parameters['finite_diff_rel_step'] if 'finite_diff_rel_step' in self.parameters else 1e-3
         res = opt.minimize(objective, x1, method='SLSQP', jac=objective_jac,
                            constraints=constraints,  # ,loss_tolerance_constraint
                            bounds=bounds,
-                           callback=(lambda x: callbackF(x,
-                                                         'interim' if 'verbose' in self.parameters else None)),
+                           callback=(lambda x: callbackF(x,'interim')) if ('verbose' in self.parameters and self.parameters['verbose']=='interim') else None,
                            options={'ftol': 1e-2, 'disp': False, 'finite_diff_rel_step': finite_diff_rel_step,
                                     'maxiter': 50 * len(x1)})
         if not res['success']:
@@ -174,23 +171,28 @@ class YieldStrategy(VaultRebalancingStrategy):
             else:
                 logging.getLogger('pfoptimizer').critical(res['message'])
 
-        if 'verbose' in self.parameters:
+        if 'verbose' in self.parameters and self.parameters['verbose'] == 'final':
             callbackF(res['x'], res['message'])
 
         self.state.weights = res['x']
         self.index = next((t for t in self.features.index if t > self.index), None)
-
-        if self.index is None:
-            raise StopIteration
+        return
 
     def update_wealth(self):
         '''
         update wealth from yields.
         '''
         prev_index = self.features[self.features.index<self.index].index[-1]
+
         dt = (self.index - prev_index).total_seconds() / timedelta(days=365).total_seconds()
         yields_dt = self.features.loc[self.index].values * dt
         base_yield_dt = 0.0
+
         x = self.state
-        x.wealth *= np.exp(np.dot(x.weights, yields_dt) + (x.wealth - sum(x.weights)) * base_yield_dt)
+        base_weight = x.wealth - np.sum(x.weights)
+
+        x.weights *= np.exp(yields_dt)
+        base_weight *= np.exp(base_yield_dt)
+        x.wealth = np.sum(x.weights) + base_weight
+
         return
