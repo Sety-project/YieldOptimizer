@@ -10,6 +10,7 @@ from strategies.vault_backtest import VaultBacktestEngine
 from strategies.cta_strategy import SingleAssetStrategy
 from strategies.backtest import BacktestEngine
 from utils.api_utils import extract_args_kwargs
+from copy import deepcopy
 
 if __name__ == "__main__":
     args, kwargs = extract_args_kwargs(sys.argv)
@@ -25,12 +26,42 @@ if __name__ == "__main__":
         print(f'backtest...\n')
         backtest = VaultBacktestEngine(parameters['backtest'])
         data = pd.DataFrame(engine.performance)
-        data = data.loc[(data.index >= backtest.parameters['start_date'])
-                            & (data.index <= backtest.parameters['end_date'])].dropna()
+        data = data.ffill().dropna()
         vault_rebalancing = YieldStrategy(parameters['strategy'],
                                           features=data,
                                           fitted_model=TrivialEwmPredictor(parameters['strategy']['haflife']))
-        backtest.run(vault_rebalancing)
+        backtest.perf_analysis(backtest.run(vault_rebalancing))
+
+        parameter_grid = {"initial_wealth": [100],
+                          "haflife": ["7d","10d", "14d","21d"],
+                          "cost": [0.001],
+                          "assumed_holding_yrs": [x/365 for x in [5,7,10,14,21,30]]}
+
+        # create parameters_list as a list of dicts from parameter_grid
+        original_parameter = parameters
+        parameter_dict = dict()
+        for initial_wealth in parameter_grid["initial_wealth"]:
+            for haflife in parameter_grid["haflife"]:
+                for cost in parameter_grid["cost"]:
+                    for assumed_holding_yrs in parameter_grid["assumed_holding_yrs"]:
+                        new_parameter = deepcopy(original_parameter['strategy'])
+                        new_parameter['initial_wealth'] = initial_wealth
+                        new_parameter['haflife'] = haflife
+                        new_parameter['cost'] = cost
+                        new_parameter['assumed_holding_yrs'] = assumed_holding_yrs
+
+                        name = (initial_wealth, haflife, cost, assumed_holding_yrs)
+
+                        parameter_dict[name]= new_parameter
+        result = dict()
+        for name, cur_params in parameter_dict.items():
+            vault_rebalancing = YieldStrategy(cur_params,
+                                              features=data,
+                                              fitted_model=TrivialEwmPredictor(cur_params['haflife']))
+            result[name] = backtest.perf_analysis(backtest.run(vault_rebalancing))
+        pd.DataFrame(columns=pd.MultiIndex.from_tuples(parameter_dict.keys()), data=result).T.to_csv(
+            os.path.join(os.sep, os.getcwd(), "logs",'grid.csv'))
+
     elif args[0] == 'cta':
         # load parameters
         with open(args[0], 'r') as fp:

@@ -66,15 +66,16 @@
         }
     },
     "strategy": {
-        "haflife": "7d",
+        "initial_wealth": 100,
+        "haflife": "14d",
         "cost": [0.001],
-        "assumed_holding_yrs": 0.02,
-        "verbose": "logs",
-        "warm_start": "True",
+        "assumed_holding_yrs": 0.05,
+        "verbose": true,
+        "warm_start": false,
         "finite_diff_rel_step": 1e-2
     },
     "backtest": {
-        "start_date": "2023-04-15T00:00:00",
-        "end_date": "2023-07-15T00:00:00"
+        "start_date": "2023-02-15T00:00:00",
+        "end_date": "2023-08-15T00:00:00"
     }
 }
