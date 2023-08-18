@@ -35,7 +35,7 @@ def ignore_error(func):
             return await func(*args, **kwargs)
         except Exception as e:
             logger = logging.getLogger(func.__module__.split('.')[0])
-            logger.warning(f'{e} running {str(func)} {args}{kwargs}', exc_info=False)
+            logger.warning(f'{str(func)}({args}{kwargs})\n-> {e}', exc_info=False)
     return wrapper_ignore_error
 
 class NpEncoder(json.JSONEncoder):
