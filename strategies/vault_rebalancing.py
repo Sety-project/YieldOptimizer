@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 from datetime import timedelta, datetime
 import scipy.optimize as opt
+from research.research_engine import ResearchEngine
 
 run_date = datetime.now()
 
@@ -82,7 +83,7 @@ class YieldStrategy(VaultRebalancingStrategy):
     '''
     convex optimization of yield
     '''
-    def __init__(self, params: dict, features: pd.DataFrame, fitted_model):
+    def __init__(self, params: dict, features: pd.DataFrame, research_engine: ResearchEngine):
         '''
         weights excludes base asset balances. Initialize at 0 (all base)
         wealth: base holding = wealth - sum(weights). Initialize at 1.
@@ -90,29 +91,36 @@ class YieldStrategy(VaultRebalancingStrategy):
         super().__init__(params)
         self.parameters = params
         self.features: pd.DataFrame = features
-        self.fitted_model = fitted_model
+        self.research_engine = research_engine
 
         self.index: datetime = self.features.index[0]
         self.state: State = State(weights=np.zeros(features.shape[1]), wealth=self.parameters['initial_wealth'])
 
         if 'cost' in params:
+            assumed_holding_yrs = research_engine.label_map['haircut_apy']['horizons']
             self.transaction_cost = TransactionCostThroughBase({
-                'cost_vector': params['cost']*np.ones(features.shape[1])/params['assumed_holding_yrs']})
+                'cost_vector': params['cost']*np.ones(features.shape[1])/assumed_holding_yrs})
         elif 'cost_matrix' in params:
             raise NotImplementedError
             self.transaction_cost = TransactionCost(params)
+
+        self.progress_display = pd.DataFrame()
+        self.current_time = datetime.now()
+
     def update_weights(self) -> None:
         '''
         fit_predict on current features -> predicted_apy -> convex optimization under wealth constraint + cost/risk penalty
         '''
-        self.fitted_model.fit(self.features[self.features.index<=self.index])
-        predicted_apys = self.fitted_model.distribution.mean
+        model = list(self.research_engine.fitted_model.values())[0]
+        predicted_apys = model.predict_proba(self.features[self.features.index<=self.index]).mean
 
         ### objective is APY - txcost (- risk?)
+        #TODO could easily add vol penalty
+        # TODO could easily discount apy by our mktimpact (linear dilution of apy)
         objective = lambda x: -(
                 np.dot(x, predicted_apys)
                 - self.transaction_cost(self.state.weights, x)
-        ) #TODO could easily add vol penalty
+        )
         objective_jac = lambda x: -(
                 predicted_apys
                 - self.transaction_cost.jacobian(self.state.weights, x)
@@ -126,24 +134,21 @@ class YieldStrategy(VaultRebalancingStrategy):
 
         # --------- verbose callback function: breaks down pnl during optimization
         def callbackF(x, print_with_flag=None):
-            progress_display = pd.DataFrame(pd.concat([
-                pd.Series({
-                    'predicted_apy': np.dot(x, predicted_apys),
-                    'tx_cost': self.transaction_cost(self.state.weights, x),
-                    'wealth_constraint': constraints[0]['fun'](x),
-                    'success': print_with_flag
-                }),
-                pd.Series({f'weight_{i}':value for i, value in enumerate(x)}),
-                pd.Series({f'apy_{i}':value for i, value in enumerate(predicted_apys)})
-            ]))  # used .append
+            new_progress = pd.Series({
+                                         'predicted_apy': np.dot(x, predicted_apys),
+                                         'tx_cost': self.transaction_cost(self.state.weights, x),
+                                         'wealth_constraint (=base weight)': constraints[0]['fun'](x),
+                                         'status': print_with_flag
+                                     }
+                                     | {f'weight_{i}': value for i, value in enumerate(x)}
+                                     | {f'apy_{i}': value for i, value in enumerate(predicted_apys)})
             pfoptimizer_path = os.path.join(os.sep, os.getcwd(), "logs")
             if not os.path.exists(pfoptimizer_path):
                 os.umask(0)
                 os.makedirs(pfoptimizer_path, mode=0o777)
-            global run_date
-            pfoptimizer_filename = os.path.join(pfoptimizer_path, "{}_backtest.csv".format(run_date.strftime("%Y%m%d-%H%M%S")))
-            progress_display.to_csv(pfoptimizer_filename, mode='w')
-            return []
+            pfoptimizer_filename = os.path.join(os.sep, pfoptimizer_path, "{}_backtest.csv".format(self.current_time.strftime("%Y%m%d-%H%M%S")))
+            self.progress_display = pd.concat([self.progress_display, new_progress], axis=1)
+            self.progress_display.T.to_csv(pfoptimizer_filename, mode='w')
 
         if 'warm_start' in self.parameters and self.parameters['warm_start']:
             x1 = self.state.weights
@@ -158,7 +163,7 @@ class YieldStrategy(VaultRebalancingStrategy):
                            constraints=constraints,  # ,loss_tolerance_constraint
                            bounds=bounds,
                            callback=(lambda x: callbackF(x,'interim')) if ('verbose' in self.parameters and self.parameters['verbose']=='interim') else None,
-                           options={'ftol': 1e-2, 'disp': False, 'finite_diff_rel_step': finite_diff_rel_step,
+                           options={'ftol': 1e-3, 'disp': False, 'finite_diff_rel_step': finite_diff_rel_step,
                                     'maxiter': 50 * len(x1)})
         if not res['success']:
             # cheeky ignore that exception:
@@ -171,7 +176,7 @@ class YieldStrategy(VaultRebalancingStrategy):
             else:
                 logging.getLogger('pfoptimizer').critical(res['message'])
 
-        if 'verbose' in self.parameters and self.parameters['verbose'] == 'final':
+        if 'verbose' in self.parameters and self.parameters['verbose'] in ['interim','final']:
             callbackF(res['x'], res['message'])
 
         self.state.weights = res['x']
