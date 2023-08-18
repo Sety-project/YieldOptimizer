@@ -1,17 +1,23 @@
 {
     "input_data": {
         "ResearchName": "defillama",
-        "dirpath": ["signal","defillama_history","data","DynLst"],
+        "dirpath": ["signal","scrappers","defillama_history","data","DynLst"],
         "start_date": "2022-02-15T00:00:00",
         "selected_instruments": [
-            "498dd436-58b1-41c4-bde9-981ced59203b",
-"fc7701fc-e290-4606-a8be-9e4ba6c5f91a",
-"5685fa0d-a7cf-4b60-9b77-ff23b4583f81",
-"febfb5b4-7485-44bc-ae4a-7b192ac61fe3",
-"423681e3-4787-40ce-ae43-e9f67c5269b3",
-"ecd0c563-8aa2-423e-b8e9-d3259a316df9",
-"e144a863-8013-49d4-8c3c-637ffd415308",
-"c9873dab-0979-478c-b48c-3c3a0c935449"]
+            "747c1d2a-c668-4682-b9f9-296708a3dd90",
+            "d4b3c522-6127-4b89-bedf-83641cdcd2eb",
+            "e6435aae-cbe9-4d26-ab2c-a4d533db9972",
+            "77020688-e1f9-443c-9388-e51ace15cc32",
+            "e880e828-ca59-4ec6-8d4f-27182a4dc23d",
+            "6d342d6a-9796-443e-8152-b94e8b6021fc",
+            "5ce23e7e-3800-4c9c-ad30-6db3db0515a1",
+            "42c02674-f7a2-4cb0-be3d-ade268838770",
+            "e378a7c2-6285-4993-9397-87ac9c8adc15",
+            "f1a22245-a1f1-4389-8ff2-dde4914b272d",
+            "4cc5df76-f81d-49fe-9e1e-4caa6a8dad0b",
+            "fc7701fc-e290-4606-a8be-9e4ba6c5f91a",
+            "c9873dab-0979-478c-b48c-3c3a0c935449"
+        ]
     },
     "run_parameters": {
         "pickle_file": "engine.pickle",
@@ -19,7 +25,7 @@
         "groupby": false,
         "cross_ewma": false,
         "models": {
-            "quantized_zscore": {
+            "haircut_apy": {
                 "TrivialEwmPredictor": {
                     "params": {"halflife": "7d"}
                 }
@@ -57,22 +63,16 @@
         }
     },
     "label_map": {
-        "quantized_zscore": {
-            "horizons": [7],
-            "stdev_buckets": {
-                "down": [-999,-0.5],
-                "stable": [-0.5,0.5],
-                "up": [0.5,999]}
+        "haircut_apy": {
+            "horizons": [7]
         }
     },
     "strategy": {
         "initial_wealth": 100,
-        "haflife": "14d",
         "cost": [0.001],
-        "assumed_holding_yrs": 0.05,
-        "verbose": true,
+        "verbose": "interim",
         "warm_start": false,
-        "finite_diff_rel_step": 1e-2
+        "finite_diff_rel_step": 1e-3
     },
     "backtest": {
         "start_date": "2023-02-15T00:00:00",
