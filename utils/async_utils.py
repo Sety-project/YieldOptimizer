@@ -6,7 +6,7 @@ import functools
 if platform.system()=='Windows':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-safe_gather_limit = 40
+safe_gather_limit = 10
 
 def async_wrap(f):
     '''
