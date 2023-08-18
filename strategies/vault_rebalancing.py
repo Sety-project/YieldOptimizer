@@ -135,7 +135,7 @@ class YieldStrategy(VaultRebalancingStrategy):
         # --------- verbose callback function: breaks down pnl during optimization
         def callbackF(x, print_with_flag=None):
             new_progress = pd.Series({
-                                         'predicted_apy': np.dot(x, predicted_apys),
+                                         'predicted_apy': np.dot(x, predicted_apys)/max(1e-8,np.sum(x)),
                                          'tx_cost': self.transaction_cost(self.state.weights, x),
                                          'wealth_constraint (=base weight)': constraints[0]['fun'](x),
                                          'status': print_with_flag
@@ -158,12 +158,13 @@ class YieldStrategy(VaultRebalancingStrategy):
         if 'verbose' in self.parameters and self.parameters['verbose'] == 'interim':
             callbackF(x1, 'initial')
 
-        finite_diff_rel_step = self.parameters['finite_diff_rel_step'] if 'finite_diff_rel_step' in self.parameters else 1e-3
+        ftol = self.parameters['ftol'] if 'ftol' in self.parameters else 1e-2
+        finite_diff_rel_step = self.parameters['finite_diff_rel_step'] if 'finite_diff_rel_step' in self.parameters else 1e-2
         res = opt.minimize(objective, x1, method='SLSQP', jac=objective_jac,
                            constraints=constraints,  # ,loss_tolerance_constraint
                            bounds=bounds,
                            callback=(lambda x: callbackF(x,'interim')) if ('verbose' in self.parameters and self.parameters['verbose']=='interim') else None,
-                           options={'ftol': 1e-3, 'disp': False, 'finite_diff_rel_step': finite_diff_rel_step,
+                           options={'ftol': ftol, 'disp': False, 'finite_diff_rel_step': finite_diff_rel_step,
                                     'maxiter': 50 * len(x1)})
         if not res['success']:
             # cheeky ignore that exception:

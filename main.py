@@ -66,7 +66,7 @@ if __name__ == "__main__":
             result[name] = backtest.perf_analysis(backtest.run(vault_rebalancing))
 
         pd.DataFrame(columns=pd.MultiIndex.from_tuples(parameter_dict.keys()), data=result).T.to_csv(
-            os.path.join(os.sep, os.getcwd(), "scrappers", "defillama_history", 'grid.csv'))
+            os.path.join(os.sep, os.getcwd(), "logs", 'grid.csv'))
 
     elif args[0] == 'cta':
         # load parameters

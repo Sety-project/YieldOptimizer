@@ -38,7 +38,7 @@ class VaultBacktestEngine:
                              | weights
                              | {f'weight_total': sum(weights.values())}
                              | yields
-                             | {f'yield_total': sum(yields.values())})
+                             | {f'yield': np.dot(list(yields.values()), list(weights.values()))/max(1e-8,sum(weights.values()))})
             result = pd.concat([result, temp], axis=1)
 
         pfoptimizer_path = os.path.join(os.sep, os.getcwd(), "logs")
