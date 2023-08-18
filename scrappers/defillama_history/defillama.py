@@ -62,7 +62,7 @@ class FilteredDefiLlama(DefiLlama):
         raise NotImplementedError
 
     @ignore_error
-    async def apy_history(self, metadata: dict,  **kwargs) -> dict[str, pd.DataFrame]:
+    async def apy_history(self, metadata: dict,  **kwargs) -> dict[str, pd.Series]:
         '''gets various components of apy history from defillama'''
 
         # get pool history
@@ -154,19 +154,29 @@ class DynLst(FilteredDefiLlama):
             '0x20bc832ca081b91433ff6c17f85701b6e92486c5': '66958f46-1d06-4f83-9fab-bbec354049d8',
             '0xac3e018457b222d93114458476f3e3416abbe38f': '77020688-e1f9-443c-9388-e51ace15cc32',
             '0xbe9895146f7af43049ca1c1ae358b0541ea49704': '0f45d730-b279-4629-8e11-ccb5cc3038b4'}
-        self.shortlisted_tokens_history = {k: self.get_pool_hist_apy(v)['apy'] for k, v in
+        self.shortlisted_tokens_history = {k: self.get_pool_hist_apy(v)['apy']/100 for k, v in
                                            shortlisted_tokens_ids.items()}
-
+    def filter_protocols(self, protocols):
+        return protocols[protocols['name'].isin([
+            'lido',
+            'frax-ether',
+            'rocket-pool',
+            'aave-v3',
+            'morpho-aavev3',
+            'balancer-v2',
+            'curve-finance',
+            'convex-finance'])]
     def filter_underlyings(self):
         '''filter tokens that are not in the shortlist'''
         return {'stETH': '0xae7ab96520de3a18e5e111b5eaab095312d7fe84',
-         'wstETH': '0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0',
-         'rETH': '0xae78736cd615f374d3085123a210448e74fc6393',
-         'rETH2': '0x20bc832ca081b91433ff6c17f85701b6e92486c5',
-         'frxETH': '0x5e8422345238f34275888049021821e8e08caa1f',
-         'sfrxETH': '0xac3e018457b222d93114458476f3e3416abbe38f',
-         'ETH': '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE'.lower(),
-         'WETH': '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2'}
+                'wstETH': '0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0',
+                'rETH': '0xae78736cd615f374d3085123a210448e74fc6393',
+                'rETH2': '0x20bc832ca081b91433ff6c17f85701b6e92486c5',
+                'frxETH': '0x5e8422345238f34275888049021821e8e08caa1f',
+                'sfrxETH': '0xac3e018457b222d93114458476f3e3416abbe38f',
+                'ETH': '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+                'null': '0x0000000000000000000000000000000000000000',
+                'WETH': '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2'}
     def filter_pools(self, pools) -> pd.DataFrame:
         # shortlist pools
         pool_filters = {
@@ -207,21 +217,19 @@ class DynLst(FilteredDefiLlama):
             # some random time series = 0
             return pd.Series(shortlisted_tokens_history['0xae7ab96520de3a18e5e111b5eaab095312d7fe84'] * 0.0)
 
-        return result
-
+    @ignore_error
     async def apy_history(self, metadata: dict, **kwargs) -> dict[str, pd.DataFrame]:
         '''gets various components of apy history from defillama'''
         dont_write_kwargs = deepcopy(kwargs)
         dont_write_kwargs.__delitem__('dirname')
         result = await super().apy_history(metadata, **dont_write_kwargs)
-        # add underlying apy
-        # TODO: reserve ratio
-        apy_underlyings = self.underlying_apy(metadata['underlyingTokens'], self.shortlisted_tokens_history) if hasattr(
-            self, 'underlying_apy') else None
 
-        result['underlying_apy'] = apy_underlyings
-        # TODO: it depends :(
-        #  result['haircut_apy'] += apy_underlyings
+        # From Defillama GUI it seems curve and convex already have underlying apy included.
+        if not metadata['project'] in ['curve-finance', 'convex-finance']:
+            # TODO: reserve ratio
+            apy_underlyings = self.underlying_apy(metadata['underlyingTokens'], self.shortlisted_tokens_history)
+            result['underlying_apy'] = apy_underlyings
+            result['haircut_apy'] += apy_underlyings
 
         if 'dirname' in kwargs:
             await self.write_history(kwargs, metadata, result)
