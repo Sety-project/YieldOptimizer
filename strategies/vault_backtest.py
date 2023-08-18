@@ -1,11 +1,9 @@
 import os
-from typing import Union
 from datetime import timedelta
 import numpy as np
 import pandas as pd
 from copy import deepcopy
 from strategies.vault_rebalancing import VaultRebalancingStrategy
-from strategies.research_engine import ResearchEngine
 from strategies.vault_rebalancing import run_date
 
 class VaultBacktestEngine:
@@ -60,7 +58,7 @@ class VaultBacktestEngine:
         dt = ((df.index.max() - df.index.min())/timedelta(days=365))
 
         weights = df[[col for col in df.columns if 'weight_' in col and col != 'weight_total']]
-        weights.loc['weight_base'] = df['wealth'] - weights.sum(axis=1)
+        weights.loc[:,'weight_base'] = df['wealth'] - weights.sum(axis=1)
         # sum p log p / max_entropy (=)
         entropy = weights.div(df['wealth'], axis=0).apply(lambda x: -np.log(x)*x).sum(axis=1)/np.log(weights.shape[1])
 
