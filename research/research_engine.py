@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from datetime import datetime, timedelta, timezone
-from typing import NewType, Union, Iterator
+from typing import NewType, Union, Iterator, Callable
 from abc import abstractmethod
 from pathlib import Path
 
@@ -110,33 +110,6 @@ def winning_trade(log_perf: pd.Series,
     return pd.Series(index=result.index,
                      name='winning_trade',
                      data=trade_outcome)
-
-class TrivialEwmPredictor:
-    def __init__(self, halflife: str):
-        self.halflife = pd.Timedelta(halflife)
-        self.distribution: multivariate_normal = None
-    def fit(self, raw_X, y=None) -> None:
-        '''
-        mere gaussian distribution, but we exclude spikes
-        '''
-        X = raw_X
-        decayed_X = X.mul(pd.Series(index=X.index,data=np.exp(-(X.index[-1] - X.index).total_seconds() / self.halflife.total_seconds())),
-                          axis=0)
-        if raw_X.shape[0] > 1:
-            if False:
-                #TODO: remove outliers and interpolate them
-                outlier_remover = MinCovDet().fit(raw_X)
-                # decayed_X[~outlier_remover.support_] = np.nan
-                # decayed_X = decayed_X.interpolate(method='linear')
-                mean = outlier_remover.location_
-                cov = outlier_remover.covariance_
-            else: # just cap at 20%
-                mean = decayed_X.applymap(lambda x: min(x,0.2)).mean()
-                cov = decayed_X.applymap(lambda x: min(x,0.2)).cov()
-        else:
-            mean = decayed_X.squeeze().values
-            cov = np.identity(raw_X.shape[1])
-        self.distribution = multivariate_normal(mean=mean, cov=cov, allow_singular=True)
 
 class ResearchEngine:
     def __init__(self, feature_map, label_map, run_parameters, input_data,**paramsNOTUSED):
@@ -463,7 +436,7 @@ class BinanceExtremeResearchEngine(ResearchEngine):
 
         yield result
 
-    def fit(self):
+    def fit(self) -> None:
         '''
         for each label/model/fold, fits one model for all instruments.
         '''
@@ -518,7 +491,40 @@ class BinanceExtremeResearchEngine(ResearchEngine):
             print(f'ran {(raw_feature, frequency)}')
 
 
+class TrivialEwmPredictor(sklearn.base.BaseEstimator):
+    def __init__(self, halflife: str):
+        self.halflife = pd.Timedelta(halflife)
+
+    def predict_proba(self, raw_X: pd.DataFrame) -> Callable:
+        '''
+        only predicts one time
+        mere gaussian distribution, but we exclude spikes
+        '''
+        X = raw_X
+        decay = pd.Series(index=X.index, data=np.exp(
+            -(X.index[-1] - X.index).total_seconds() / self.halflife.total_seconds()))
+        decayed_X = X.mul(decay, axis=0)
+        if raw_X.shape[0] > 1:
+            if False:
+                # TODO: remove outliers and interpolate them
+                outlier_remover = MinCovDet().fit(raw_X)
+                # decayed_X[~outlier_remover.support_] = np.nan
+                # decayed_X = decayed_X.interpolate(method='linear')
+                mean = outlier_remover.location_/decay.sum()
+                cov = outlier_remover.covariance_/(decay * decay).sum()
+            else:  # just cap at 20%
+                mean = decayed_X.applymap(lambda x: min(x, 0.2)).sum()/decay.sum()
+                cov = decayed_X.applymap(lambda x: min(x, 0.2)).cov()/(decay * decay).sum()
+        else:
+            mean = decayed_X.squeeze().values
+            cov = np.identity(raw_X.shape[1])
+        return multivariate_normal(mean=mean, cov=cov, allow_singular=True)
+
+
 class DefillamaResearchEngine(ResearchEngine):
+    '''
+    simple ewma predictor for yield
+    '''
     data_interval = timedelta(days=1)
     execution_lag = 0
 
@@ -556,21 +562,29 @@ class DefillamaResearchEngine(ResearchEngine):
             self.performance[instrument] = file_data[instrument]['haircut_apy']
 
             for horizon in label_map[raw_feature]['horizons']:
-                future_perf = file_data[instrument]['haircut_apy'].rolling(horizon).sum().shift(-horizon)
+                temp = self.performance[instrument].rolling(window=horizon).mean().shift(-horizon)
                 feature = (instrument, raw_feature, horizon)
-                result[feature] = remove_duplicate_rows(future_perf).rename(feature)
+                result[feature] = remove_duplicate_rows(temp).rename(feature)
 
         return result
 
+
     def fit(self):
+        '''
+        for each label/model/fold, fits one model for all instruments.
+        '''
         # for each (all instruments, 1 feature, 1 horizon)...
         for (raw_feature, frequency), label_df in self.Y.groupby(level=['feature', 'window'], axis=1):
             # for each model for that feature...
             if raw_feature not in self.run_parameters['models']:
                 continue
             for model_name, model_params in self.run_parameters['models'][raw_feature].items():
-                fitted_model = TrivialEwmPredictor(**model_params['params'])
-                self.fitted_model[(raw_feature, frequency, model_name, 0)] = fitted_model
+                model_obj = globals()[model_name](**model_params['params'])
+                # no fit needed for trivial model
+                fitted_model = model_obj
+                split_index = 0
+                self.fitted_model[(raw_feature, frequency, model_name, split_index)] = copy.deepcopy(fitted_model)
+
 
 def model_analysis(engine: ResearchEngine):
     feature_list=list(engine.X.xs(engine.input_data['selected_instruments'][0], level='instrument', axis=1).columns)
@@ -594,7 +608,8 @@ def model_analysis(engine: ResearchEngine):
     return pd.concat(result, axis=1)
 
 
-def build_ResearchEgine(parameters) -> ResearchEngine:
+def build_ResearchEgine(input_parameters) -> ResearchEngine:
+    parameters = copy.deepcopy(input_parameters)
     research_name = parameters['input_data'].pop("ResearchName")
     if research_name == "defillama":
         '''defillama'''
