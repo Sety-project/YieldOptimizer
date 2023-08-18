@@ -4,7 +4,7 @@ from datetime import timedelta
 import numpy as np
 import pandas as pd
 from strategies.cta_strategy import SingleAssetStrategy
-from strategies.research_engine import ResearchEngine
+from research.research_engine import ResearchEngine
 
 class BacktestEngine:
     def __init__(self, params: dict, delta_strategy: SingleAssetStrategy):
