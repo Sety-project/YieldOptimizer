@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 import pandas as pd
 import pickle
-from research.research_engine import build_ResearchEgine, TrivialEwmPredictor, model_analysis
+from research.research_engine import build_ResearchEngine, TrivialEwmPredictor, model_analysis
 from strategies.vault_rebalancing import YieldStrategy
 from strategies.vault_backtest import VaultBacktestEngine
 from strategies.cta_strategy import SingleAssetStrategy
@@ -20,7 +20,7 @@ if __name__ == "__main__":
             parameters = json.load(fp)
 
         print(f'data...\n')
-        engine = build_ResearchEgine(parameters)
+        engine = build_ResearchEngine(parameters)
 
         # backtest
         print(f'backtest...\n')
@@ -32,38 +32,45 @@ if __name__ == "__main__":
                                           research_engine=engine)
         backtest.perf_analysis(backtest.run(vault_rebalancing))
 
-        parameter_grid = {"initial_wealth": [100],
+        parameter_grid = {"cap": [0.2],
                           "haflife": ["7d","10d", "14d","21d"],
                           "cost": [0.001],
                           "assumed_holding_days": [5,7,10,14,21,30]}
-        parameter_grid = {"initial_wealth": [100],
+        parameter_grid = {"cap": [0.2],
                           "haflife": ["10d"],
-                          "cost": [0.001],
+                          "cost": [0.0001],
                           "assumed_holding_days": [10]}
 
         # create parameters_list as a list of dicts from parameter_grid
         original_parameter = parameters
         parameter_dict = dict()
-        for initial_wealth in parameter_grid["initial_wealth"]:
+        for cap in parameter_grid["cap"]:
             for haflife in parameter_grid["haflife"]:
                 for cost in parameter_grid["cost"]:
                     for assumed_holding_days in parameter_grid["assumed_holding_days"]:
                         new_parameter = deepcopy(original_parameter)
-                        new_parameter['strategy']['initial_wealth'] = initial_wealth
+                        new_parameter["run_parameters"]["models"]["haircut_apy"]["TrivialEwmPredictor"]["params"]['cap'] = cap
                         new_parameter["run_parameters"]["models"]["haircut_apy"]["TrivialEwmPredictor"]["params"]['halflife'] = haflife
                         new_parameter['strategy']['cost'] = cost
                         new_parameter["label_map"]["haircut_apy"]["horizons"] = [assumed_holding_days]
 
-                        name = (initial_wealth, haflife, cost, assumed_holding_days)
+                        name = (cap, haflife, cost, assumed_holding_days)
 
-                        parameter_dict[name]= new_parameter
+                        parameter_dict[name] = new_parameter
         result = dict()
         for name, cur_params in parameter_dict.items():
-            engine = build_ResearchEgine(cur_params)
+            engine = build_ResearchEngine(cur_params)
             vault_rebalancing = YieldStrategy(cur_params['strategy'],
                                               features=data,
                                               research_engine=engine)
-            result[name] = backtest.perf_analysis(backtest.run(vault_rebalancing))
+            cur_run = backtest.run(vault_rebalancing)
+
+            # print 2 file
+            name_to_str = ''.join(['{}_'.format(str(elem)) for elem in name])
+            VaultBacktestEngine.write_results(cur_run, os.path.join(os.sep, os.getcwd(), "logs"), name_to_str)
+
+            # insert in dict
+            result[name] = backtest.perf_analysis(cur_run)
 
         pd.DataFrame(columns=pd.MultiIndex.from_tuples(parameter_dict.keys()), data=result).T.to_csv(
             os.path.join(os.sep, os.getcwd(), "logs", 'grid.csv'))
@@ -94,7 +101,7 @@ if __name__ == "__main__":
                 parameters['run_parameters']['pickle_output'] = parameters['input_data']["pickle_override"]
 
         if not skip_run_research:
-            engine = build_ResearchEgine(parameters)
+            engine = build_ResearchEngine(parameters)
 
         # backtest
         delta_strategy = SingleAssetStrategy(parameters['strategy'], engine)

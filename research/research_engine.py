@@ -492,8 +492,9 @@ class BinanceExtremeResearchEngine(ResearchEngine):
 
 
 class TrivialEwmPredictor(sklearn.base.BaseEstimator):
-    def __init__(self, halflife: str):
+    def __init__(self, halflife: str, cap: float):
         self.halflife = pd.Timedelta(halflife)
+        self.cap = cap
 
     def predict_proba(self, raw_X: pd.DataFrame) -> Callable:
         '''
@@ -608,7 +609,7 @@ def model_analysis(engine: ResearchEngine):
     return pd.concat(result, axis=1)
 
 
-def build_ResearchEgine(input_parameters) -> ResearchEngine:
+def build_ResearchEngine(input_parameters) -> ResearchEngine:
     parameters = copy.deepcopy(input_parameters)
     research_name = parameters['input_data'].pop("ResearchName")
     if research_name == "defillama":

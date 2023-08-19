@@ -5,6 +5,7 @@ import pandas as pd
 from copy import deepcopy
 from strategies.vault_rebalancing import VaultRebalancingStrategy
 from strategies.vault_rebalancing import run_date
+from utils.sklearn_utils import entropy
 
 class VaultBacktestEngine:
     def __init__(self, params: dict):
@@ -17,7 +18,7 @@ class VaultBacktestEngine:
         Runs a backtest on one instrument.
         '''
 
-        result = pd.DataFrame()
+        result = {'pnl': [],'weights': [],'yields': []}
         indices = rebalancing_strategy.features[
             (rebalancing_strategy.features.index>=self.parameters['start_date'])
         & (rebalancing_strategy.features.index <= self.parameters['end_date'])].index
@@ -31,39 +32,43 @@ class VaultBacktestEngine:
             yields = {f'yield_{i}': rebalancing_strategy.features.loc[index].iloc[i]
                       for i, _ in enumerate(rebalancing_strategy.features.columns)}
 
-            temp = pd.Series(name=index,data=
-                              {'wealth': prev_state.wealth,
-                              'tx_cost': rebalancing_strategy.transaction_cost(prev_state.weights,
-                                                                               rebalancing_strategy.state.weights)}
-                             | weights
-                             | {f'weight_total': sum(weights.values())}
-                             | yields
-                             | {f'yield': np.dot(list(yields.values()), list(weights.values()))/max(1e-8,sum(weights.values()))})
-            result = pd.concat([result, temp], axis=1)
+            temp = dict()
+            temp['pnl'] = pd.Series(name=index, data=
+            {'wealth': prev_state.wealth,
+             'tx_cost': rebalancing_strategy.transaction_cost(prev_state.weights,
+                                                              rebalancing_strategy.state.weights)})
+            temp['weights'] = pd.Series(name=index, data=weights
+                                                         |{f'weight_base': prev_state.wealth - sum(weights.values())})
+            temp['yields'] = pd.Series(name=index, data=yields
+                                                        |{f'eff_yield': np.dot(list(yields.values()),
+                                                                                list(weights.values())) / max(1e-8,
+                                                                                                              sum(weights.values()))})
+            for key, value in temp.items():
+                result[key].append(value)
 
-        pfoptimizer_path = os.path.join(os.sep, os.getcwd(), "logs")
-        if not os.path.exists(pfoptimizer_path):
-            os.umask(0)
-            os.makedirs(pfoptimizer_path, mode=0o777)
-
-        pfoptimizer_filename = os.path.join(pfoptimizer_path, "{}_result.csv".format(run_date.strftime("%Y%m%d-%H%M%S")))
-        result.T.to_csv(pfoptimizer_filename,
-                                  mode='w')
-        return result.T
-
-    def perf_analysis(self, df: pd.DataFrame) -> pd.DataFrame:
+        return {key: pd.DataFrame(list_series) for key, list_series in result.items()}
+    @staticmethod
+    def write_results(df: dict[str, pd.DataFrame], dirname: str, filename: str):
+        '''
+        writes backtest results to a csv file
+        '''
+        for key, value in deepcopy(df).items():
+            value.columns = pd.MultiIndex.from_tuples([(key, col) for col in value.columns])
+        pd.concat(df.values(), axis=1).to_csv(os.path.join(os.sep, dirname, f'{filename}.csv'))
+    def perf_analysis(self, df: dict[str, pd.DataFrame]) -> pd.DataFrame:
         '''
         returns performance metrics for a backtest: perf, tx_cost, avg gini
         '''
-        dt = ((df.index.max() - df.index.min())/timedelta(days=365))
 
-        weights = df[[col for col in df.columns if 'weight_' in col and col != 'weight_total']]
-        weights.loc[:,'weight_base'] = df['wealth'] - weights.sum(axis=1)
+        weights = df['weights']
+        dt = ((weights.index.max() - weights.index.min())/timedelta(days=365))
+
         # sum p log p / max_entropy (=)
-        entropy = weights.div(df['wealth'], axis=0).apply(lambda x: -np.log(x)*x).sum(axis=1)/np.log(weights.shape[1])
+        entr = entropy(weights)
 
-        result = pd.Series({'perf': np.log(df['wealth'].iloc[-1]/df['wealth'].iloc[0])/dt,
-                   'tx_cost': df['tx_cost'].sum()/df['wealth'].iloc[0]/dt,
-                   'avg_entropy': entropy.mean()})
+        pnl = df['pnl']
+        result = pd.Series({'perf': np.log(pnl['wealth'].iloc[-1]/pnl['wealth'].iloc[0])/dt,
+                   'tx_cost': pnl['tx_cost'].sum()/pnl['wealth'].iloc[0]/dt,
+                   'avg_entropy': entr.mean()})
 
         return result

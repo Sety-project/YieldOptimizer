@@ -352,7 +352,7 @@ def print_top_pools(new_apy: dict[str,pd.DataFrame]) -> pd.DataFrame:
     top_pools = top_pools.T.sort_values(by='haircut_apy',ascending=False)
     # save to excel
     try:
-        with pd.ExcelWriter('defillama_hist.xlsx', engine='openpyxl', mode='a') as writer:
+        with pd.ExcelWriter('defillama_hist.xlsx', engine='openpyxl', mode='w') as writer:
             top_pools.to_excel(writer, datetime.now().strftime(f"{sys.argv[2]} %d %m %Y %H_%M_%S"))
     except PermissionError:
         print('Please close the excel file')

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import numpy as np
+import pandas as pd
 from sklearn.model_selection._split import _BaseKFold, indexable, _num_samples
 from sklearn.utils.validation import _deprecate_positional_args
 
@@ -124,3 +125,9 @@ class GroupTimeSeriesSplit(_BaseKFold):
                                                               test_array_tmp)),
                                      axis=None), axis=None)
             yield [int(i) for i in train_array], [int(i) for i in test_array]
+
+def entropy(weights: pd.DataFrame):
+    rescaled = weights.div(weights.sum(axis=1), axis=0)
+    entrop = rescaled.apply(lambda x: -np.log(x) * x).sum(axis=1)
+    normalized = entrop / np.log(len(weights.columns))
+    return normalized
