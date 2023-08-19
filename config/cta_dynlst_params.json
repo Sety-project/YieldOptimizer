@@ -27,7 +27,7 @@
         "models": {
             "haircut_apy": {
                 "TrivialEwmPredictor": {
-                    "params": {"halflife": "7d"}
+                    "params": {"halflife": "7d", "cap": 0.3}
                 }
             }
         }
@@ -64,13 +64,13 @@
     },
     "label_map": {
         "haircut_apy": {
-            "horizons": [7]
+            "horizons": [30]
         }
     },
     "strategy": {
         "initial_wealth": 100,
-        "cost": [0.001],
-        "verbose": "interim",
+        "cost": [0.0001],
+        "verbose": false,
         "warm_start": false,
         "finite_diff_rel_step": 1e-2,
         "ftol": 1e-2
