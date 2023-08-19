@@ -4,6 +4,9 @@ import os
 from pathlib import Path
 import pandas as pd
 import pickle
+
+import yaml
+
 from research.research_engine import build_ResearchEngine, TrivialEwmPredictor, model_analysis
 from strategies.vault_rebalancing import YieldStrategy
 from strategies.vault_backtest import VaultBacktestEngine
@@ -15,9 +18,9 @@ from copy import deepcopy
 if __name__ == "__main__":
     args, kwargs = extract_args_kwargs(sys.argv)
     if args[0] == 'vault':
-        # load parameters
+        # load parameters from yaml
         with open(args[1], 'r') as fp:
-            parameters = json.load(fp)
+            parameters = yaml.safe_load(fp)
 
         print(f'data...\n')
         engine = build_ResearchEngine(parameters)
