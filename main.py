@@ -8,7 +8,7 @@ from research.research_engine import build_ResearchEngine, TrivialEwmPredictor, 
 from strategies.vault_rebalancing import YieldStrategy
 from strategies.vault_backtest import VaultBacktestEngine
 from strategies.cta_strategy import SingleAssetStrategy
-from strategies.backtest import BacktestEngine
+from strategies.cta_backtest import BacktestEngine
 from utils.api_utils import extract_args_kwargs
 from copy import deepcopy
 
