@@ -501,9 +501,9 @@ class TrivialEwmPredictor(sklearn.base.BaseEstimator):
         only predicts one time
         mere gaussian distribution, but we exclude spikes
         '''
-        X = raw_X
+        X = raw_X.applymap(lambda x: min(x, self.cap))
         decay = pd.Series(index=X.index, data=np.exp(
-            -(X.index[-1] - X.index).total_seconds() / self.halflife.total_seconds()))
+            -(X.index[-1] - X.index) / self.halflife))
         decayed_X = X.mul(decay, axis=0)
         if raw_X.shape[0] > 1:
             if False:
@@ -513,9 +513,9 @@ class TrivialEwmPredictor(sklearn.base.BaseEstimator):
                 # decayed_X = decayed_X.interpolate(method='linear')
                 mean = outlier_remover.location_/decay.sum()
                 cov = outlier_remover.covariance_/(decay * decay).sum()
-            else:  # just cap at 20%
-                mean = decayed_X.applymap(lambda x: min(x, 0.2)).sum()/decay.sum()
-                cov = decayed_X.applymap(lambda x: min(x, 0.2)).cov()/(decay * decay).sum()
+            else:
+                mean = decayed_X.sum()/decay.sum()
+                cov = decayed_X.cov()/(decay * decay).sum()
         else:
             mean = decayed_X.squeeze().values
             cov = np.identity(raw_X.shape[1])
