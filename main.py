@@ -39,10 +39,6 @@ if __name__ == "__main__":
                           "haflife": ["7d","10d", "14d","21d"],
                           "cost": [0.001],
                           "assumed_holding_days": [5,7,10,14,21,30]}
-        parameter_grid = {"cap": [0.2],
-                          "haflife": ["10d"],
-                          "cost": [0.0001],
-                          "assumed_holding_days": [10]}
 
         # create parameters_list as a list of dicts from parameter_grid
         original_parameter = parameters
@@ -69,7 +65,7 @@ if __name__ == "__main__":
             cur_run = backtest.run(vault_rebalancing)
 
             # print 2 file
-            name_to_str = ''.join(['{}_'.format(str(elem)) for elem in name])
+            name_to_str = ''.join(['{}_'.format(str(elem)) for elem in name]) + '_backtest'
             VaultBacktestEngine.write_results(cur_run, os.path.join(os.sep, os.getcwd(), "logs"), name_to_str)
 
             # insert in dict
