@@ -6,22 +6,21 @@ input_data:
   - defillama_history
   - data
   - DynLst
-  selected_instruments:
-  - 747c1d2a-c668-4682-b9f9-296708a3dd90
-  - d4b3c522-6127-4b89-bedf-83641cdcd2eb
-  - e6435aae-cbe9-4d26-ab2c-a4d533db9972
-  - 77020688-e1f9-443c-9388-e51ace15cc32
-  - e880e828-ca59-4ec6-8d4f-27182a4dc23d
-  - 6d342d6a-9796-443e-8152-b94e8b6021fc
-  - 5ce23e7e-3800-4c9c-ad30-6db3db0515a1
-  - 42c02674-f7a2-4cb0-be3d-ade268838770
-  - e378a7c2-6285-4993-9397-87ac9c8adc15
-  - f1a22245-a1f1-4389-8ff2-dde4914b272d
-  - 4cc5df76-f81d-49fe-9e1e-4caa6a8dad0b
-  - fc7701fc-e290-4606-a8be-9e4ba6c5f91a
-  - c9873dab-0979-478c-b48c-3c3a0c935449
+  selected_instruments: # this comes from top5ever
+  - "42c02674-f7a2-4cb0-be3d-ade268838770" # balancer-v2_RETH-WETH
+  - "4cc5df76-f81d-49fe-9e1e-4caa6a8dad0b" # balancer-v2_WSTETH-WETH
+  - "5ce23e7e-3800-4c9c-ad30-6db3db0515a1" # convex-finance_ETH-STETH
+  - "747c1d2a-c668-4682-b9f9-296708a3dd90" # lido_STETH
+  - "77020688-e1f9-443c-9388-e51ace15cc32" # frax-ether_SFRXETH
+  - "c9873dab-0979-478c-b48c-3c3a0c935449" # convex-finance_STETH-FRXETH
+  - "d4b3c522-6127-4b89-bedf-83641cdcd2eb" # rocket-pool_RETH
+  - "e378a7c2-6285-4993-9397-87ac9c8adc15" # convex-finance_ETH-STETH
+  - "e6435aae-cbe9-4d26-ab2c-a4d533db9972" # aave-v3_WSTETH
+  - "f1a22245-a1f1-4389-8ff2-dde4914b272d" # aave-v3_RETH
+  - "fc7701fc-e290-4606-a8be-9e4ba6c5f91a" # convex-finance_ETH-RETH
   start_date: '2022-02-15T00:00:00'
 run_parameters:
+  normalize: false
   cross_ewma: false
   groupby: false
   models:
@@ -34,62 +33,25 @@ run_parameters:
   unit_test: false
 feature_map: # each feature present here will be transformed. times are in days.
   haircut_apy:
-    transform: compound
-    ewma_expansion:
-      cross_ewma: false
-      windows:
-      - 1
-      - 3
-      - 7
-    max_expansion:
-      windows:
-      - 1
-      - 3
-      - 7
-    min_expansion:
-      windows:
-      - 1
-      - 3
-      - 7
-  tvl:
-    transform: log
-    ewma_expansion:
-      quantiles:
-      - 0.35
-      - 0.65
-      - 1.0
-      windows:
-      - 7
-  apyReward:
-    transform: compound
-    ewma_expansion:
-      quantiles:
-      - 0.35
-      - 0.65
-      - 1.0
-      windows:
-      - 7
-  il:
-    ewma_expansion:
-      quantiles:
-      - 0.35
-      - 0.65
-      - 1.0
-      windows:
-      - 7
-    transform: compound
+    as_is:
 label_map:
   haircut_apy:
     horizons: # only first is used for now
     - 10
 strategy:
-  cost: 0.01 # 1e-4 is a bp
-  base_buffer: 0.0 # relative to wealth
-  finite_diff_rel_step: None # for jacobian numerical calculation
-  ftol: 0.001 # yield precision
-  initial_wealth: 100
-  verbose: true # to print optimization steps
-  warm_start: false
+  cost: 0.001 # 1e-4 is a bp
+  gas: 40 # in $
+  base_buffer: 0.1 # relative to wealth
+  concentration_limit: 0.5
+  initial_wealth: 1000000
+  solver_params:
+    solver: "ECOS"
+    verbose: false
+    warm_start: false
+    max_iters: 100
+    abstol: 1
+    reltol: 0.01
+    feastol: 0.01
 backtest:
-  end_date: '2023-08-15T00:00:00'
   start_date: '2023-02-15T00:00:00'
+  end_date: '2023-08-15T00:00:00'
