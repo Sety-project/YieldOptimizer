@@ -207,6 +207,8 @@ class ResearchEngine:
                     getattr(self, method)(data_dict, instrument, raw_feature, result, params)
         return result
 
+    def as_is(self, data_dict, instrument, raw_feature, result, params) -> None:
+        result[(instrument, raw_feature, f'as_is')] = data_dict[(instrument, raw_feature)]
     def ewma_expansion(self, data_dict, instrument, raw_feature, result, params) -> None:
         '''add several ewma, volume_weighted if requested'''
         temp: Data = Data(dict())
@@ -348,13 +350,17 @@ class ResearchEngine:
             X_Y = pd.concat([self.X, self.Y], axis=1).dropna()
             # concat / dropna to have same index
             self.X = normalize(X_Y[self.X.columns])
+            if 'normalize' in self.run_parameters and self.run_parameters['normalize']:
+                self.X = normalize(self.X)
             self.Y = X_Y[self.Y.columns]
         else:
             self.temp_label_data = self.compute_labels(file_data, label_map)
             # concat / dropna to have same index
-            X_Y = pd.concat(self.temp_feature_data | self.temp_label_data, axis=1).dropna()
+            X_Y = pd.concat(self.temp_feature_data | self.temp_label_data, axis=1)#TODO:.dropna()
             X_Y.columns.rename(['instrument', 'feature', 'window'], inplace=True)
-            self.X = normalize(X_Y[self.temp_feature_data.keys()])
+            self.X = X_Y[self.temp_feature_data.keys()]
+            if 'normalize' in self.run_parameters and self.run_parameters['normalize']:
+                self.X = normalize(self.X)
             self.Y = X_Y[self.temp_label_data.keys()]
 
     @abstractmethod
@@ -496,6 +502,8 @@ class TrivialEwmPredictor(sklearn.base.BaseEstimator):
         self.halflife = pd.Timedelta(halflife)
         self.cap = cap
 
+    def predict(self, raw_X: pd.DataFrame) -> Callable:
+        return self.predict_proba(raw_X).mean
     def predict_proba(self, raw_X: pd.DataFrame) -> Callable:
         '''
         only predicts one time
@@ -514,10 +522,20 @@ class TrivialEwmPredictor(sklearn.base.BaseEstimator):
                 mean = outlier_remover.location_/decay.sum()
                 cov = outlier_remover.covariance_/(decay * decay).sum()
             else:
-                mean = decayed_X.sum()/decay.sum()
+                mean = (decayed_X.sum()/decay.sum())
                 cov = decayed_X.cov()/(decay * decay).sum()
+
+                # some series may have NaNs. cleanup.
+                mean = mean.fillna(0.0).values
+                for i in range(cov.shape[0]):
+                    if np.isnan(cov.iloc[i, i]):
+                        cov.iloc[i, i] = 1.0
+                cov = cov.fillna(0.0)
+
+                #TODO: somehow still not posdef...give up for now
+                cov = np.eye(raw_X.shape[1])
         else:
-            mean = decayed_X.squeeze().values
+            mean = decayed_X.squeeze().fillna(0.0).values
             cov = np.identity(raw_X.shape[1])
         return multivariate_normal(mean=mean, cov=cov, allow_singular=True)
 
@@ -559,9 +577,6 @@ class DefillamaResearchEngine(ResearchEngine):
         '''
         result: Data = Data(dict())
         for instrument, raw_feature in itertools.product(file_data.keys(), label_map.keys()):
-            # record performance for use in backtest
-            self.performance[instrument] = file_data[instrument]['haircut_apy']
-
             for horizon in label_map[raw_feature]['horizons']:
                 temp = self.performance[instrument].rolling(window=horizon).mean().shift(-horizon)
                 feature = (instrument, raw_feature, horizon)
@@ -619,6 +634,11 @@ def build_ResearchEngine(input_parameters) -> ResearchEngine:
         '''binance_extreme'''
         result = BinanceExtremeResearchEngine(**parameters)
     file_data = result.read_data(**parameters['input_data'])
+
+    # record performance for use in backtest
+    for instrument in file_data:
+        result.performance[instrument] = file_data[instrument]['haircut_apy']
+
     result.build_X_Y(file_data, parameters['feature_map'], parameters['label_map'],
                      unit_test=parameters['run_parameters']['unit_test'])
     result.fit()
