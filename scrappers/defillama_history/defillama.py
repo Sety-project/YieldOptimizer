@@ -150,6 +150,7 @@ class DynLst(FilteredDefiLlama):
         # get underlying history for performance
         shortlisted_tokens_ids = {
             '0xae7ab96520de3a18e5e111b5eaab095312d7fe84': '747c1d2a-c668-4682-b9f9-296708a3dd90',
+            '0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0': '747c1d2a-c668-4682-b9f9-296708a3dd90',
             '0xae78736cd615f374d3085123a210448e74fc6393': 'd4b3c522-6127-4b89-bedf-83641cdcd2eb',
             '0x20bc832ca081b91433ff6c17f85701b6e92486c5': '66958f46-1d06-4f83-9fab-bbec354049d8',
             '0xac3e018457b222d93114458476f3e3416abbe38f': '77020688-e1f9-443c-9388-e51ace15cc32',
@@ -380,7 +381,7 @@ if __name__ == '__main__':
                               {'discount_lookback': timedelta(days=90),
                                'end': end.strftime(date_format),
                                'end_format': date_format,
-                               'span': 700,
+                               'span': 900,
                                'period': '1d'}
                           }
 
