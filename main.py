@@ -1,3 +1,4 @@
+from itertools import product
 import sys
 import json
 import os
@@ -22,56 +23,68 @@ if __name__ == "__main__":
         with open(args[1], 'r') as fp:
             parameters = yaml.safe_load(fp)
 
-        print(f'data...\n')
+        parameter_grid = {"cap": [0.3],
+                          "haflife": ["10d"],
+                          "cost": [0.0001, 0.0005, 0.001, 0.005],
+                          "gaz": [0.1, 40],
+                          "assumed_holding_days": [1, 10, 30],
+                          "base_buffer": [0.0, 0.1, .25],
+                          "concentration_limit": [0.5, 0.7]}
+        destination_grid = {"cap": [0.3],
+                          "haflife": ["10d"],
+                          "cost": [0.0001, 0.0005, 0.001, 0.005],
+                          "gaz": [0.1, 40],
+                          "assumed_holding_days": [1, 10, 30],
+                          "base_buffer": [0.0, 0.1, .25],
+                          "concentration_limit": [0.5, 0.7]}
+        def modify_target_with_argument(target: dict, argument: dict) -> dict:
+            result = deepcopy(target)
+            if "cap" in argument:
+                result["run_parameters"]["models"]["haircut_apy"]["TrivialEwmPredictor"]["params"]['cap'] = argument['cap']
+            if "haflife" in argument:
+                result["run_parameters"]["models"]["haircut_apy"]["TrivialEwmPredictor"]["params"]['halflife'] = argument['haflife']
+            if "cost" in argument:
+                result['strategy']['cost'] = argument['cost']
+            if "gas" in argument:
+                result['strategy']['gas'] = argument['gas']
+            if "base_buffer" in argument:
+                result['strategy']['base_buffer'] = argument['base_buffer']
+            if "concentration_limit" in argument:
+                result['strategy']['concentration_limit'] = argument['concentration_limit']
+            if "assumed_holding_days" in argument:
+                result["label_map"]["haircut_apy"]["horizons"] = [argument['assumed_holding_days']]
+            return result
+
+        def dict_list_to_combinations(d: dict) -> list:
+            keys = d.keys()
+            values = d.values()
+            combinations = [dict(zip(keys, combination)) for combination in product(*values)]
+            return combinations
+
+        # data
         engine = build_ResearchEngine(parameters)
+        performance = pd.concat(engine.performance, axis=1)
 
-        # backtest
-        print(f'backtest...\n')
-        backtest = VaultBacktestEngine(parameters['backtest'])
-        data = pd.DataFrame(engine.performance)
-        data = data.ffill().dropna()
-        vault_rebalancing = YieldStrategy(parameters['strategy'],
-                                          features=data,
-                                          research_engine=engine)
-        backtest.perf_analysis(backtest.run(vault_rebalancing))
-
-        parameter_grid = {"cap": [0.2],
-                          "haflife": ["7d","10d", "14d","21d"],
-                          "cost": [0.001],
-                          "assumed_holding_days": [5,7,10,14,21,30]}
-
-        # create parameters_list as a list of dicts from parameter_grid
-        original_parameter = parameters
-        parameter_dict = dict()
-        for cap in parameter_grid["cap"]:
-            for haflife in parameter_grid["haflife"]:
-                for cost in parameter_grid["cost"]:
-                    for assumed_holding_days in parameter_grid["assumed_holding_days"]:
-                        new_parameter = deepcopy(original_parameter)
-                        new_parameter["run_parameters"]["models"]["haircut_apy"]["TrivialEwmPredictor"]["params"]['cap'] = cap
-                        new_parameter["run_parameters"]["models"]["haircut_apy"]["TrivialEwmPredictor"]["params"]['halflife'] = haflife
-                        new_parameter['strategy']['cost'] = cost
-                        new_parameter["label_map"]["haircut_apy"]["horizons"] = [assumed_holding_days]
-
-                        name = (cap, haflife, cost, assumed_holding_days)
-
-                        parameter_dict[name] = new_parameter
         result = dict()
-        for name, cur_params in parameter_dict.items():
-            engine = build_ResearchEngine(cur_params)
-            vault_rebalancing = YieldStrategy(cur_params['strategy'],
-                                              features=data,
-                                              research_engine=engine)
+        for cur_params in dict_list_to_combinations(parameter_grid):
+            new_parameter = modify_target_with_argument(parameters, cur_params)
+            name = tuple(new_parameter.values())
+
+            engine = build_ResearchEngine(new_parameter)
+            # backtest truncatesand fillna performance to match start and end date
+            backtest = VaultBacktestEngine(performance, parameters['backtest'])
+
+            vault_rebalancing = YieldStrategy(research_engine=engine, params=new_parameter['strategy'])
             cur_run = backtest.run(vault_rebalancing)
 
-            # print 2 file
+            # print to file
             name_to_str = ''.join(['{}_'.format(str(elem)) for elem in name]) + '_backtest'
             VaultBacktestEngine.write_results(cur_run, os.path.join(os.sep, os.getcwd(), "logs"), name_to_str)
 
             # insert in dict
             result[name] = backtest.perf_analysis(cur_run)
 
-        pd.DataFrame(columns=pd.MultiIndex.from_tuples(parameter_dict.keys()), data=result).T.to_csv(
+        pd.DataFrame(columns=pd.MultiIndex.from_tuples(new_parameter.keys()), data=result).T.to_csv(
             os.path.join(os.sep, os.getcwd(), "logs", 'grid.csv'))
 
     elif args[0] == 'cta':

@@ -3,15 +3,15 @@ from datetime import timedelta
 import numpy as np
 import pandas as pd
 from copy import deepcopy
+from research.research_engine import ResearchEngine
 from strategies.vault_rebalancing import VaultRebalancingStrategy
-from strategies.vault_rebalancing import run_date
 from utils.sklearn_utils import entropy
 
 class VaultBacktestEngine:
-    def __init__(self, params: dict):
-        self.parameters = params
-        self.parameters['start_date'] = pd.to_datetime(self.parameters['start_date'], unit='ns', utc=True)
-        self.parameters['end_date'] = pd.to_datetime(self.parameters['end_date'], unit='ns', utc=True)
+    def __init__(self, performance: pd.DataFrame, params: dict):
+        self.start_date = pd.to_datetime(params['start_date'], unit='ns', utc=True)
+        self.end_date = pd.to_datetime(params['end_date'], unit='ns', utc=True)
+        self.performance = performance[(performance.index >= self.start_date) & (performance.index <= self.end_date)]
 
     def run(self, rebalancing_strategy: VaultRebalancingStrategy) -> dict[str, pd.DataFrame]:
         '''
@@ -19,46 +19,51 @@ class VaultBacktestEngine:
         '''
 
         result = {'pnl': [],'weights': [],'yields': [], 'pred_yields': []}
-        indices = rebalancing_strategy.features[
-            (rebalancing_strategy.features.index>=self.parameters['start_date'])
-        & (rebalancing_strategy.features.index <= self.parameters['end_date'])].index
-        for index in indices:
+        prev_index = self.performance.index[0]
+        for index, cur_performance in self.performance.iterrows():
             prev_state = deepcopy(rebalancing_strategy.state)
 
-            predicted_apys = rebalancing_strategy.predict(list(rebalancing_strategy.research_engine.fitted_model.values())[0])
-            rebalancing_strategy.update_weights(predicted_apys)
-            rebalancing_strategy.update_wealth()
+            predicted_apys = rebalancing_strategy.predict(index)
+            optimal_weights = rebalancing_strategy.optimal_weights(predicted_apys)
+            transaction_costs, gas = rebalancing_strategy.update_wealth(optimal_weights, prev_state, prev_index, cur_performance.fillna(0.0))
 
-            weights = {f'weight_{i}': prev_state.weights[i]
-                       for i, _ in enumerate(rebalancing_strategy.features.columns)}
-            yields = {f'yield_{i}': rebalancing_strategy.features.loc[index].iloc[i]
-                      for i, _ in enumerate(rebalancing_strategy.features.columns)}
-            pred_yields = {f'pred_yield_{i}':  predicted_apys[i]
-                      for i, _ in enumerate(predicted_apys)}
+            prev_index = index
 
-            temp = dict()
-            temp['weights'] = pd.Series(name=index, data=weights
-                                                         |{f'weight_base': prev_state.wealth - sum(weights.values())})
-            eff_yield = np.dot(list(yields.values()),
-                   list(weights.values())) / max(1e-8,
-                                                 sum(weights.values()))
-            temp['yields'] = pd.Series(name=index, data=yields | {f'eff_yield': eff_yield})
-            eff_pred_yield = np.dot(list(pred_yields.values()),
-                   list(weights.values())) / max(1e-8,
-                                                 sum(weights.values()))
-            temp['pred_yields'] = pd.Series(name=index, data=pred_yields | {f'eff_pred_yield': eff_pred_yield})
-            temp['pnl'] = pd.Series(name=index, data=
-            {'wealth': prev_state.wealth,
-             'tx_cost': rebalancing_strategy.transaction_cost(prev_state.weights,
-                                                              rebalancing_strategy.state.weights),
-             'tracking_error': sum(
-                 prev_state.weights[i] * (predicted_apys[i] - rebalancing_strategy.features.loc[index].iloc[i])
-                 for i in range(len(yields)))})
-
-            for key, value in temp.items():
-                result[key].append(value)
+            self.record_result(index, predicted_apys, prev_state, rebalancing_strategy, transaction_costs, gas, result)
 
         return {key: pd.DataFrame(list_series) for key, list_series in result.items()}
+
+    def record_result(self, index, predicted_apys, prev_state, rebalancing_strategy, transaction_costs, gas, result):
+        weights = {f'weight_{i}': weight
+                   for i, weight in enumerate(prev_state.weights)}
+        performance = pd.concat(rebalancing_strategy.research_engine.performance, axis=1)
+        yields = {f'yield_{i}': perf
+                  for i, perf in enumerate(performance.loc[index].values)}
+        pred_yields = {f'pred_yield_{i}': predicted_apy
+                       for i, predicted_apy in enumerate(predicted_apys)}
+        temp = dict()
+        temp['weights'] = pd.Series(name=index, data=weights
+                                                     | {f'weight_base': prev_state.wealth - sum(weights.values())})
+        eff_yield = np.dot(list(yields.values()),
+                           list(weights.values())) / max(1e-8,
+                                                         sum(weights.values()))
+        temp['yields'] = pd.Series(name=index, data=yields | {f'eff_yield': eff_yield})
+        eff_pred_yield = np.dot(list(pred_yields.values()),
+                                list(weights.values())) / max(1e-8,
+                                                              sum(weights.values()))
+        temp['pred_yields'] = pd.Series(name=index, data=pred_yields | {f'eff_pred_yield': eff_pred_yield})
+        predict_horizon = rebalancing_strategy.research_engine.label_map['haircut_apy']['horizons'][0]
+        temp['pnl'] = pd.Series(name=index, data=
+        {'wealth': prev_state.wealth,
+         'tx_cost': transaction_costs,
+         'gas': gas,
+         'tracking_error': np.dot(prev_state.weights,
+                                  performance.rolling(predict_horizon).mean().shift(
+                                      -predict_horizon).loc[index] - predicted_apys)
+                           / max(1e-8, sum(prev_state.weights))})
+        for key, value in temp.items():
+            result[key].append(value)
+
     @staticmethod
     def write_results(df: dict[str, pd.DataFrame], dirname: str, filename: str):
         '''
