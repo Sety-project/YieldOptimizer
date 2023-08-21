@@ -1,6 +1,7 @@
 import os
 from abc import ABC, abstractmethod
 import logging
+from copy import deepcopy
 import pandas as pd
 import numpy as np
 from datetime import timedelta, datetime
@@ -68,165 +69,75 @@ class TransactionCostThroughBase(TransactionCost):
 
 class VaultRebalancingStrategy(ABC):
     '''
-    TODO: inherit from forked backtesting.py
+    stateful (self.index) object that implements a rebalancing strategy.
+    has a research engine to get features and fitted models and performance.
     '''
-    def __init__(self, params: dict, features: pd.DataFrame, research_engine: ResearchEngine):
+    def __init__(self, research_engine: ResearchEngine, params: dict):
         self.parameters = params
-        self.features: pd.DataFrame = features
         self.research_engine = research_engine
 
-        self.index: datetime = self.features.index[0]
-        self.state: State = State(weights=np.zeros(self.features.shape[1]), wealth=self.parameters['initial_wealth'])
+        N = len(research_engine.performance)
+        self.state: State = State(weights=np.zeros(N),
+                                  wealth=self.parameters['initial_wealth'])
 
         if 'cost' in params:
             assumed_holding_days = research_engine.label_map['haircut_apy']['horizons']
             self.transaction_cost = TransactionCostThroughBase({
-                'cost_vector': np.full(features.shape[1], params['cost']/(assumed_holding_days[0]/365.0))})
+                'cost_vector': np.full(N, params['cost']/(assumed_holding_days[0]/365.0))})
         elif 'cost_matrix' in params:
             raise NotImplementedError
             self.transaction_cost = TransactionCost(params)
     @abstractmethod
-    def predict(self, model: sklearn.base.BaseEstimator):
+    def predict(self, index: datetime) -> np.array:
         raise NotImplementedError
     @abstractmethod
-    def update_weights(self):
+    def optimal_weights(self):
         raise NotImplementedError
     @abstractmethod
-    def update_wealth(self):
+    def update_wealth(self, prev_state: State) -> None:
         raise NotImplementedError
 class YieldStrategy(VaultRebalancingStrategy):
     '''
     convex optimization of yield
     '''
-    def __init__(self, params: dict, features: pd.DataFrame, research_engine: ResearchEngine):
+    def __init__(self, research_engine: ResearchEngine, params: dict):
         '''
         weights excludes base asset balances. Initialize at 0 (all base)
         wealth: base holding = wealth - sum(weights). Initialize at 1.
         '''
-        super().__init__(params, features, research_engine)
+        super().__init__(research_engine, params)
         self.progress_display = pd.DataFrame()
         self.current_time = datetime.now()
 
-    def update_weights(self, predicted_apys: np.array) -> None:
+    def predict(self, index: datetime) -> np.array:
         '''
-        fit_predict on current features -> predicted_apy -> convex optimization under wealth constraint + cost/risk penalty
+        uses research engine to predict apy at index
         '''
-        ####### CVXPY version #######
-        res = self.solve_cvx_problem(predicted_apys,
-        solver=getattr(cp, 'ECOS'), verbose=False, warm_start=False,
-                                     max_iters=1000,
-                                     abstol=1e-3,
-                                     reltol=1e-3,
-                                     feastol=1e-3)
-        #res2 = self.solve_scipy_problem(predicted_apys)
-
-        self.state.weights = res['x']
-        self.index = next((t for t in self.features.index if t > self.index), None)
-        return
-
-    def predict(self, model: sklearn.base.BaseEstimator):
-        history = self.features[self.features.index <= self.index]
-        predicted_apys = model.predict_proba(history).mean
+        history = self.research_engine.X[self.research_engine.X.index <= index]
+        model: sklearn.base.BaseEstimator = list(self.research_engine.fitted_model.values())[0]
+        predicted_apys = model.predict(history)
         return predicted_apys
 
-    # def solve_scipy_problem(self, predicted_apys: np.array):
-    #     ### objective is APY - txcost (- risk?)
-    #     # TODO could easily add vol penalty
-    #     # TODO could easily discount apy by our mktimpact (linear dilution of apy)
-    #     objective = lambda x: -(
-    #         np.dot(x, predicted_apys)
-    #         #                - self.transaction_cost(self.state.weights, x)
-    #     )
-    #     objective_jac = lambda x: -(
-    #         predicted_apys
-    #         #               - self.transaction_cost.jacobian(self.state.weights, x)
-    #     )
-    #     constraints = [{'type': 'ineq',
-    #                     'fun': lambda x: self.state.wealth * (1.0 - self.parameters['base_buffer']) - np.sum(x),
-    #                     'jac': lambda x: -np.ones(self.features.shape[1])}]
-    #     bounds = opt.Bounds(lb=np.zeros(self.features.shape[1]),
-    #                         ub=np.full(self.features.shape[1], self.state.wealth))
-    #
-    #     # --------- verbose callback function: breaks down pnl during optimization
-    #     def callbackF(x, details=None, print_with_flag=None):
-    #         new_progress = pd.Series({
-    #                                      'predicted_apy': np.dot(x, predicted_apys) / max(1e-8, np.sum(x)),
-    #                                      'tx_cost': self.transaction_cost(self.state.weights, x),
-    #                                      'wealth_constraint (=base weight)': constraints[0]['fun'](x),
-    #                                      'status': print_with_flag,
-    #                                      'jac_error': opt.check_grad(objective, objective_jac, x),
-    #                                  }
-    #                                  | {f'weight_{i}': value for i, value in enumerate(x)}
-    #                                  | {f'pred_apy_{i}': value for i, value in enumerate(predicted_apys)})
-    #                             #TODO:| {f'spot_apy_{i}': value for i, value in enumerate(history.iloc[-1].values)})
-    #         pfoptimizer_path = os.path.join(os.sep, os.getcwd(), "logs")
-    #         if not os.path.exists(pfoptimizer_path):
-    #             os.umask(0)
-    #             os.makedirs(pfoptimizer_path, mode=0o777)
-    #         pfoptimizer_filename = os.path.join(os.sep, pfoptimizer_path, "{}_optimization.csv".format(
-    #             self.current_time.strftime("%Y%m%d-%H%M%S")))
-    #         self.progress_display = pd.concat([self.progress_display, new_progress], axis=1)
-    #         self.progress_display.T.to_csv(pfoptimizer_filename, mode='w')
-    #
-    #     if 'warm_start' in self.parameters and self.parameters['warm_start']:
-    #         x1 = self.state.weights
-    #     else:
-    #         x1 = np.zeros(self.features.shape[1])
-    #     if 'verbose' in self.parameters and self.parameters['verbose']:
-    #         callbackF(x1, details=None, print_with_flag='initial')
-    #     ftol = self.parameters['ftol'] if 'ftol' in self.parameters else 1e-4
-    #     finite_diff_rel_step = self.parameters[
-    #         'finite_diff_rel_step'] if 'finite_diff_rel_step' in self.parameters else 1e-2
-    #     method = 'SLSQP'
-    #     if method == 'SLSQP':
-    #         res = opt.minimize(objective, x1, method=method, jac=objective_jac,
-    #                            constraints=constraints,  # ,loss_tolerance_constraint
-    #                            bounds=bounds,
-    #                            callback=(lambda x: callbackF(x, details=None, print_with_flag='interim')) if (
-    #                                        'verbose' in self.parameters and self.parameters['verbose']) else None,
-    #                            options={'ftol': ftol, 'disp': False, 'finite_diff_rel_step': finite_diff_rel_step,
-    #                                     'maxiter': 50 * self.features.shape[1]})
-    #     elif method == 'trust-constr':
-    #         res = opt.minimize(objective, x1, method=method, jac=objective_jac,
-    #                            constraints=[LinearConstraint(np.array([np.ones(self.features.shape[1])]),
-    #                                                          [0],
-    #                                                          [self.state.wealth * (
-    #                                                                      1 - self.parameters['base_buffer'])])],
-    #                            # ,loss_tolerance_constraint
-    #                            bounds=bounds,
-    #                            callback=(
-    #                                lambda x, details: callbackF(x, details=details, print_with_flag='interim')) if (
-    #                                    'verbose' in self.parameters and self.parameters['verbose']) else None,
-    #                            options={'gtol': ftol, 'disp': False,
-    #                                     'maxiter': 50 * self.features.shape[1]})
-    #     if not res['success']:
-    #         # cheeky ignore that exception:
-    #         # https://github.com/scipy/scipy/issues/3056 -> SLSQP is unfomfortable with numerical jacobian when solution is on bounds, but in fact does converge.
-    #         violation = - min([constraint['fun'](res['x']) for constraint in constraints])
-    #         if res['message'] == 'Iteration limit reached':
-    #             logging.getLogger('pfoptimizer').warning(res[
-    #                                                          'message'] + '...but SLSQP is uncomfortable with numerical jacobian when solution is on bounds, but in fact does converge.')
-    #         elif res['message'] == "Inequality constraints incompatible" and violation < self.state.wealth / 100:
-    #             logging.getLogger('pfoptimizer').warning(res['message'] + '...but only by' + str(violation))
-    #         else:
-    #             logging.getLogger('pfoptimizer').critical(res['message'])
-    #     if 'verbose' in self.parameters and self.parameters['verbose']:
-    #         callbackF(res['x'], details=None, print_with_flag=res['message'])
-    #     return res
 
     def solve_cvx_problem(self, predicted_apys, **kwargs):
         # Define the variables and parameters
-        x = cp.Variable(shape=self.features.shape[1], nonneg=True, value=self.state.weights)
-        a = cp.Parameter(shape=self.features.shape[1], nonneg=True, value=predicted_apys)
-        x0 = cp.Parameter(shape=self.features.shape[1], nonneg=True, value=self.state.weights)
-        cost = cp.Parameter(shape=self.features.shape[1], nonneg=True, value=self.transaction_cost.params['cost_vector'])
-        max_x = cp.Parameter(value=self.state.wealth * (1.0 - self.parameters['base_buffer']))
-        # Define the DCP expression. Trick y to make DPP compliant with y ?
-        objective = cp.Minimize(-a @ x + cost @ cp.abs(x - x0))
-        constraints = [cp.sum(x) <= max_x]
+        N = len(predicted_apys)
+        try:
+            x = cp.Variable(shape=N, nonneg=True, value=deepcopy(self.state.weights))
+        except ValueError:
+            pass
+        a = cp.Parameter(shape=N, nonneg=True, value=predicted_apys)
+        x0 = cp.Parameter(shape=N, nonneg=True, value=self.state.weights)
+        cost = cp.Parameter(shape=N, nonneg=True, value=self.transaction_cost.params['cost_vector'])
+        max_x = cp.Parameter(shape=N, nonneg=True, value=[self.state.wealth * self.parameters['concentration_limit']]*N)
+        max_sumx = cp.Parameter(value=self.state.wealth * (1.0 - self.parameters['base_buffer']))
 
-        problem = cp.Problem(objective, constraints)
+        # Define the DCP expression. TODO:Trick y to make DPP compliant using y ?
+        objective = cp.Minimize(-a @ x + cost @ cp.abs(x - x0))
+        constraints = [cp.sum(x) == max_sumx, x <= max_x]
+
         # Solve the problem and print stdout
+        problem = cp.Problem(objective, constraints)
         with io.StringIO() as buf, redirect_stdout(buf):
             problem.solve(**kwargs)
             solver_comments = buf.getvalue()
@@ -236,21 +147,160 @@ class YieldStrategy(VaultRebalancingStrategy):
                 'y': problem.value if problem.status == 'optimal' else None,
                 'x': x.value if problem.status == 'optimal' else None}
 
-    def update_wealth(self):
-        '''
-        update wealth from yields.
-        '''
-        prev_index = self.features[self.features.index<self.index].index[-1]
+    def gas_reducing_attempt(self, N, expected_dollar_chg, new_res, res):
+        #### algo to reduce nb tx after optimization, while keeping sum(weights) invariant
+        # order expected_dollar_chg by descending expected_dollar_chg
+        ordering_by_chg = sorted(range(N), key=lambda i: expected_dollar_chg[i], reverse=True)
+        cumulative_reductions = 0
+        for i in ordering_by_chg:
+            # cut small deposits
+            if 0 < expected_dollar_chg[i] < 2 * self.parameters['gas']:
+                new_res[i] = 0
+                cumulative_reductions += res['x'][i]
+            elif expected_dollar_chg[i] < 0:
+                new_res[i] = 0
+                # cut small withdrawals until sum(weight) invariant
+                if cumulative_reductions > res['x'][i]:
+                    new_res[i] = 0
+                    cumulative_reductions -= res['x'][i]
+                else:
+                    new_res[i] = res['x'][i] - cumulative_reductions
+                    break
 
-        dt = (self.index - prev_index) / timedelta(days=365)
-        yields_dt = self.features.loc[self.index].values * dt
+    def optimal_weights(self, predicted_apys: np.array) -> np.array:
+        '''
+        fit_predict on current features -> predicted_apy -> convex optimization under wealth constraint + cost/risk penalty
+        then increments state and index
+        '''
+        ####### CVXPY version #######
+        res = self.solve_cvx_problem(predicted_apys,**self.parameters['solver_params'])
+        new_res = self.gas_reduction_attempt_easier(predicted_apys, res)
+
+        return new_res
+
+    def gas_reduction_attempt_easier(self, predicted_apys, res):
+        # now cancel trades with |pnl| less than gas. don't reallocate to the rest
+        expected_yield_chg = predicted_apys * (res['x'] - self.state.weights)
+        expected_dollar_chg = expected_yield_chg * self.research_engine.label_map['haircut_apy']['horizons'][0] / 365
+        new_res = [res['x'][i] if gain > 2 * self.parameters['gas'] else self.state.weights[i]
+                   for i, gain in enumerate(expected_dollar_chg)]
+        transactions_idx = [i for i, new_r in enumerate(new_res) if new_r != self.state.weights[i]]
+        if len(transactions_idx) > 0:
+            adjustment = sum(res['x'][i] for i in transactions_idx) / sum(res['x'][i] for i in transactions_idx)
+            new_res = [new_r * adjustment if new_r != self.state.weights[i] else new_r for i, new_r in enumerate(new_res)]
+
+        # to_reallocate = sum(res['x']) - sum(new_res)
+        # new_res[np.argmax(res['x'])] += to_reallocate
+        return new_res
+
+    def update_wealth(self, new_weights: np.array, prev_state: State, prev_index: datetime, cur_performance: pd.Series) -> tuple([float, float]):
+        '''
+        update wealth from yields, tx cost, and gas
+        '''
+        # prev_index is None for first iteration
+        if prev_index is None:
+            return
+
+        new_base_weight = self.state.wealth - np.sum(new_weights)
+
+        # yields * dt
+        dt = (cur_performance.name - prev_index) / timedelta(days=365)
+        yields_dt = cur_performance.values * dt
         base_yield_dt = 0.0
 
-        x = self.state
-        base_weight = x.wealth - np.sum(x.weights)
+        # costs, evaluate before strategy value move
+        transaction_costs = np.dot(np.ones(len(new_weights)) * self.parameters['cost'], np.abs(self.state.weights - new_weights))
+        gas = sum([self.parameters['gas'] if abs(new_weights[i] - self.state.weights[i]) > 1e-8 else 0
+                   for i in range(len(new_weights))])
 
-        x.weights *= np.exp(yields_dt)
-        base_weight *= np.exp(base_yield_dt)
-        x.wealth = np.sum(x.weights) + base_weight
+        # strategies and vault pnl after yield accrual
+        self.state.weights = new_weights * np.exp(yields_dt)
+        new_base_weight *= np.exp(base_yield_dt)
+        self.state.wealth = np.sum(self.state.weights) + new_base_weight - transaction_costs - gas
 
-        return
+        return transaction_costs, gas
+
+    def solve_scipy_problem(self, predicted_apys: np.array):
+        ### objective is APY - txcost (- risk?)
+        # TODO could easily add vol penalty
+        # TODO could easily discount apy by our mktimpact (linear dilution of apy)
+        objective = lambda x: -(
+            np.dot(x, predicted_apys)
+            #                - self.transaction_cost(self.state.weights, x)
+        )
+        objective_jac = lambda x: -(
+            predicted_apys
+            #               - self.transaction_cost.jacobian(self.state.weights, x)
+        )
+        constraints = [{'type': 'ineq',
+                        'fun': lambda x: self.state.wealth * (1.0 - self.parameters['base_buffer']) - np.sum(x),
+                        'jac': lambda x: -np.ones(self.features.shape[1])}]
+        bounds = opt.Bounds(lb=np.zeros(self.features.shape[1]),
+                            ub=np.full(self.features.shape[1], self.state.wealth))
+
+        # --------- verbose callback function: breaks down pnl during optimization
+        def callbackF(x, details=None, print_with_flag=None):
+            new_progress = pd.Series({
+                                         'predicted_apy': np.dot(x, predicted_apys) / max(1e-8, np.sum(x)),
+                                         'tx_cost': self.transaction_cost(self.state.weights, x),
+                                         'wealth_constraint (=base weight)': constraints[0]['fun'](x),
+                                         'status': print_with_flag,
+                                         'jac_error': opt.check_grad(objective, objective_jac, x),
+                                     }
+                                     | {f'weight_{i}': value for i, value in enumerate(x)}
+                                     | {f'pred_apy_{i}': value for i, value in enumerate(predicted_apys)})
+                                #TODO:| {f'spot_apy_{i}': value for i, value in enumerate(history.iloc[-1].values)})
+            pfoptimizer_path = os.path.join(os.sep, os.getcwd(), "logs")
+            if not os.path.exists(pfoptimizer_path):
+                os.umask(0)
+                os.makedirs(pfoptimizer_path, mode=0o777)
+            pfoptimizer_filename = os.path.join(os.sep, pfoptimizer_path, "{}_optimization.csv".format(
+                self.current_time.strftime("%Y%m%d-%H%M%S")))
+            self.progress_display = pd.concat([self.progress_display, new_progress], axis=1)
+            self.progress_display.T.to_csv(pfoptimizer_filename, mode='w')
+
+        if 'warm_start' in self.parameters and self.parameters['warm_start']:
+            x1 = self.state.weights
+        else:
+            x1 = np.zeros(self.features.shape[1])
+        if 'verbose' in self.parameters and self.parameters['verbose']:
+            callbackF(x1, details=None, print_with_flag='initial')
+        ftol = self.parameters['ftol'] if 'ftol' in self.parameters else 1e-4
+        finite_diff_rel_step = self.parameters[
+            'finite_diff_rel_step'] if 'finite_diff_rel_step' in self.parameters else 1e-2
+        method = 'SLSQP'
+        if method == 'SLSQP':
+            res = opt.minimize(objective, x1, method=method, jac=objective_jac,
+                               constraints=constraints,  # ,loss_tolerance_constraint
+                               bounds=bounds,
+                               callback=(lambda x: callbackF(x, details=None, print_with_flag='interim')) if (
+                                           'verbose' in self.parameters and self.parameters['verbose']) else None,
+                               options={'ftol': ftol, 'disp': False, 'finite_diff_rel_step': finite_diff_rel_step,
+                                        'maxiter': 50 * self.features.shape[1]})
+        elif method == 'trust-constr':
+            res = opt.minimize(objective, x1, method=method, jac=objective_jac,
+                               constraints=[LinearConstraint(np.array([np.ones(self.features.shape[1])]),
+                                                             [0],
+                                                             [self.state.wealth * (
+                                                                         1 - self.parameters['base_buffer'])])],
+                               # ,loss_tolerance_constraint
+                               bounds=bounds,
+                               callback=(
+                                   lambda x, details: callbackF(x, details=details, print_with_flag='interim')) if (
+                                       'verbose' in self.parameters and self.parameters['verbose']) else None,
+                               options={'gtol': ftol, 'disp': False,
+                                        'maxiter': 50 * self.features.shape[1]})
+        if not res['success']:
+            # cheeky ignore that exception:
+            # https://github.com/scipy/scipy/issues/3056 -> SLSQP is unfomfortable with numerical jacobian when solution is on bounds, but in fact does converge.
+            violation = - min([constraint['fun'](res['x']) for constraint in constraints])
+            if res['message'] == 'Iteration limit reached':
+                logging.getLogger('pfoptimizer').warning(res[
+                                                             'message'] + '...but SLSQP is uncomfortable with numerical jacobian when solution is on bounds, but in fact does converge.')
+            elif res['message'] == "Inequality constraints incompatible" and violation < self.state.wealth / 100:
+                logging.getLogger('pfoptimizer').warning(res['message'] + '...but only by' + str(violation))
+            else:
+                logging.getLogger('pfoptimizer').critical(res['message'])
+        if 'verbose' in self.parameters and self.parameters['verbose']:
+            callbackF(res['x'], details=None, print_with_flag=res['message'])
+        return res
