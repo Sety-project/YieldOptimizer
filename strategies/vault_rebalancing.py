@@ -82,6 +82,8 @@ class VaultRebalancingStrategy(ABC):
 
         if 'cost' in params:
             assumed_holding_days = research_engine.label_map['haircut_apy']['horizons']
+            if len(assumed_holding_days) > 1:
+                raise NotImplementedError
             self.transaction_cost = TransactionCostThroughBase({
                 'cost_vector': np.full(N, params['cost']/(assumed_holding_days[0]/365.0))})
         elif 'cost_matrix' in params:
@@ -128,7 +130,8 @@ class YieldStrategy(VaultRebalancingStrategy):
             pass
         a = cp.Parameter(shape=N, nonneg=True, value=predicted_apys)
         x0 = cp.Parameter(shape=N, nonneg=True, value=self.state.weights)
-        cost = cp.Parameter(shape=N, nonneg=True, value=self.transaction_cost.params['cost_vector'])
+        cost = cp.Parameter(shape=N, nonneg=True, value=self.transaction_cost.params['cost_vector']
+        if not ('cost_blind_optimization' in self.parameters and self.parameters['cost_blind_optimization']) else np.zeros(N))
         max_x = cp.Parameter(shape=N, nonneg=True, value=[self.state.wealth * self.parameters['concentration_limit']]*N)
         max_sumx = cp.Parameter(value=self.state.wealth * (1.0 - self.parameters['base_buffer']))
 
