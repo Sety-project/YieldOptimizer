@@ -30,13 +30,7 @@ if __name__ == "__main__":
                           "assumed_holding_days": [1, 10, 30],
                           "base_buffer": [0.0, 0.1, .25],
                           "concentration_limit": [0.5, 0.7]}
-        destination_grid = {"cap": [0.3],
-                          "haflife": ["10d"],
-                          "cost": [0.0001, 0.0005, 0.001, 0.005],
-                          "gaz": [0.1, 40],
-                          "assumed_holding_days": [1, 10, 30],
-                          "base_buffer": [0.0, 0.1, .25],
-                          "concentration_limit": [0.5, 0.7]}
+
         def modify_target_with_argument(target: dict, argument: dict) -> dict:
             result = deepcopy(target)
             if "cap" in argument:
@@ -65,10 +59,10 @@ if __name__ == "__main__":
         engine = build_ResearchEngine(parameters)
         performance = pd.concat(engine.performance, axis=1)
 
-        result = dict()
+        result: list[dict] = list()
         for cur_params in dict_list_to_combinations(parameter_grid):
             new_parameter = modify_target_with_argument(parameters, cur_params)
-            name = tuple(new_parameter.values())
+            name = pd.Series(cur_params)
 
             engine = build_ResearchEngine(new_parameter)
             # backtest truncatesand fillna performance to match start and end date
@@ -82,9 +76,9 @@ if __name__ == "__main__":
             VaultBacktestEngine.write_results(cur_run, os.path.join(os.sep, os.getcwd(), "logs"), name_to_str)
 
             # insert in dict
-            result[name] = backtest.perf_analysis(cur_run)
+            result.append(pd.concat([pd.Series(cur_params), backtest.perf_analysis(cur_run)]))
 
-        pd.DataFrame(columns=pd.MultiIndex.from_tuples(new_parameter.keys()), data=result).T.to_csv(
+        pd.DataFrame(result).to_csv(
             os.path.join(os.sep, os.getcwd(), "logs", 'grid.csv'))
 
     elif args[0] == 'cta':
