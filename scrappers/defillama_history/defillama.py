@@ -166,7 +166,8 @@ class DynLst(FilteredDefiLlama):
             'morpho-aavev3',
             'balancer-v2',
             'curve-finance',
-            'convex-finance'])]
+            'convex-finance',
+            'instadapp'])]
     def filter_underlyings(self):
         '''filter tokens that are not in the shortlist'''
         return {'stETH': '0xae7ab96520de3a18e5e111b5eaab095312d7fe84',
@@ -390,9 +391,12 @@ if __name__ == '__main__':
         coros = [defillama.apy_history(x, **history_kwargs) for _, x in defillama.pools.iterrows()]
         all_history = defillama.all_apy_history(**history_kwargs)
 
-        apy = compute_moments(all_history)
-        top_pools = print_top_pools(apy)
-        historical_best_pools = get_historical_best_pools(apy, 10, start, end).resample('d').apply('mean')
-        mean_best_history = historical_best_pools.mean(axis=1)
-        ever_been_top = defillama.pools[defillama.pools['pool'].isin(historical_best_pools.columns)]
-        print('done')
+        try:
+            apy = compute_moments(all_history)
+            top_pools = print_top_pools(apy)
+            historical_best_pools = get_historical_best_pools(apy, 10, start, end).resample('d').apply('mean')
+            mean_best_history = historical_best_pools.mean(axis=1)
+            ever_been_top = defillama.pools[defillama.pools['pool'].isin(historical_best_pools.columns)]
+            print('done')
+        except Exception as e:
+            pass

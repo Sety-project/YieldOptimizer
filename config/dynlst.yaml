@@ -18,7 +18,8 @@ input_data:
   - "e6435aae-cbe9-4d26-ab2c-a4d533db9972" # aave-v3_WSTETH
   - "f1a22245-a1f1-4389-8ff2-dde4914b272d" # aave-v3_RETH
   - "fc7701fc-e290-4606-a8be-9e4ba6c5f91a" # convex-finance_ETH-RETH
-  start_date: '2022-02-15T00:00:00'
+  - "e72916f7-a2d1-47ad-a4b9-2b054337cfd6" # instdapp morpho
+  start_date: '2022-06-15T00:00:00'
 run_parameters:
   normalize: false
   cross_ewma: false
@@ -39,6 +40,7 @@ label_map:
     horizons: # only first is used for now
     - 10
 strategy:
+  cost_blind_optimization: true
   cost: 0.001 # 1e-4 is a bp
   gas: 40 # in $
   base_buffer: 0.1 # relative to wealth
@@ -53,5 +55,5 @@ strategy:
     reltol: 0.01
     feastol: 0.01
 backtest:
-  start_date: '2023-02-15T00:00:00'
-  end_date: '2023-08-15T00:00:00'
+  start_date: '2023-02-21T00:00:00'
+  end_date: '2023-08-21T00:00:00'
