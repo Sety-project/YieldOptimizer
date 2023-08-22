@@ -3,7 +3,9 @@ from datetime import timedelta
 import numpy as np
 import pandas as pd
 from copy import deepcopy
-from research.research_engine import ResearchEngine
+from itertools import product
+from research.research_engine import build_ResearchEngine, ResearchEngine
+from strategies.vault_rebalancing import YieldStrategy
 from strategies.vault_rebalancing import VaultRebalancingStrategy
 from utils.sklearn_utils import entropy
 
@@ -32,6 +34,61 @@ class VaultBacktestEngine:
             self.record_result(index, predicted_apys, prev_state, rebalancing_strategy, transaction_costs, gas, result)
 
         return {key: pd.DataFrame(list_series) for key, list_series in result.items()}
+
+    @staticmethod
+    def run_grid(parameter_grid: dict, parameters: dict) -> pd.DataFrame:
+        def modify_target_with_argument(target: dict, argument: dict) -> dict:
+            result = deepcopy(target)
+            if "cap" in argument:
+                result["run_parameters"]["models"]["haircut_apy"]["TrivialEwmPredictor"]["params"]['cap'] = argument[
+                    'cap']
+            if "haflife" in argument:
+                result["run_parameters"]["models"]["haircut_apy"]["TrivialEwmPredictor"]["params"]['halflife'] = \
+                argument[
+                    'haflife']
+            if "cost_blind_optimization" in argument:
+                result['strategy']['cost_blind_optimization'] = argument['cost_blind_optimization']
+            if "cost" in argument:
+                result['strategy']['cost'] = argument['cost']
+            if "gas" in argument:
+                result['strategy']['gas'] = argument['gas']
+            if "base_buffer" in argument:
+                result['strategy']['base_buffer'] = argument['base_buffer']
+            if "concentration_limit" in argument:
+                result['strategy']['concentration_limit'] = argument['concentration_limit']
+            if "assumed_holding_days" in argument:
+                result["label_map"]["haircut_apy"]["horizons"] = [argument['assumed_holding_days']]
+            return result
+
+        def dict_list_to_combinations(d: dict) -> list[pd.DataFrame]:
+            keys = d.keys()
+            values = d.values()
+            combinations = [dict(zip(keys, combination)) for combination in product(*values)]
+            return combinations
+
+        # data
+        engine: ResearchEngine = build_ResearchEngine(parameters)
+        performance = pd.concat(engine.performance, axis=1)
+        result: list[pd.Series] = list()
+        for cur_params in dict_list_to_combinations(parameter_grid):
+            new_parameter = modify_target_with_argument(parameters, cur_params)
+            name = pd.Series(cur_params)
+
+            engine = build_ResearchEngine(new_parameter)
+            # backtest truncatesand fillna performance to match start and end date
+            backtest = VaultBacktestEngine(performance, parameters['backtest'])
+
+            vault_rebalancing = YieldStrategy(research_engine=engine, params=new_parameter['strategy'])
+            cur_run = backtest.run(vault_rebalancing)
+
+            # print to file
+            name_to_str = ''.join(['{}_'.format(str(elem)) for elem in name]) + '_backtest'
+            VaultBacktestEngine.write_results(cur_run, os.path.join(os.sep, os.getcwd(), "logs"), name_to_str)
+
+            # insert in dict
+            result.append(pd.concat([pd.Series(cur_params), backtest.perf_analysis(cur_run)]))
+
+        return pd.DataFrame(result)
 
     def record_result(self, index, predicted_apys, prev_state, rebalancing_strategy, transaction_costs, gas, result):
         weights = {f'weight_{i}': weight

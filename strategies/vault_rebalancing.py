@@ -130,6 +130,7 @@ class YieldStrategy(VaultRebalancingStrategy):
             pass
         a = cp.Parameter(shape=N, nonneg=True, value=predicted_apys)
         x0 = cp.Parameter(shape=N, nonneg=True, value=self.state.weights)
+        # cost_blind_optimization disables cost in the objective, BUT NOT in update_wealth
         cost = cp.Parameter(shape=N, nonneg=True, value=self.transaction_cost.params['cost_vector']
         if not ('cost_blind_optimization' in self.parameters and self.parameters['cost_blind_optimization']) else np.zeros(N))
         max_x = cp.Parameter(shape=N, nonneg=True, value=[self.state.wealth * self.parameters['concentration_limit']]*N)

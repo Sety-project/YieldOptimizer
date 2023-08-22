@@ -1,4 +1,3 @@
-from itertools import product
 import sys
 import json
 import os
@@ -8,13 +7,12 @@ import pickle
 
 import yaml
 
-from research.research_engine import build_ResearchEngine, TrivialEwmPredictor, model_analysis
-from strategies.vault_rebalancing import YieldStrategy
+from research.research_engine import build_ResearchEngine, model_analysis
 from strategies.vault_backtest import VaultBacktestEngine
 from strategies.cta_strategy import SingleAssetStrategy
 from strategies.cta_backtest import BacktestEngine
 from utils.api_utils import extract_args_kwargs
-from copy import deepcopy
+
 
 if __name__ == "__main__":
     args, kwargs = extract_args_kwargs(sys.argv)
@@ -25,61 +23,21 @@ if __name__ == "__main__":
 
         parameter_grid = {"cap": [0.3],
                           "haflife": ["10d"],
+                          "cost_blind_optimization": [False, True],
                           "cost": [0.0001, 0.0005, 0.001, 0.005],
                           "gaz": [0.1, 40],
-                          "assumed_holding_days": [1, 10, 30],
-                          "base_buffer": [0.0, 0.1, .25],
-                          "concentration_limit": [0.5, 0.7]}
+                          "assumed_holding_days": [10, 30],
+                          "base_buffer": [0.0, 0.1],
+                          "concentration_limit": [0.4, 0.8]}
 
-        def modify_target_with_argument(target: dict, argument: dict) -> dict:
-            result = deepcopy(target)
-            if "cap" in argument:
-                result["run_parameters"]["models"]["haircut_apy"]["TrivialEwmPredictor"]["params"]['cap'] = argument['cap']
-            if "haflife" in argument:
-                result["run_parameters"]["models"]["haircut_apy"]["TrivialEwmPredictor"]["params"]['halflife'] = argument['haflife']
-            if "cost" in argument:
-                result['strategy']['cost'] = argument['cost']
-            if "gas" in argument:
-                result['strategy']['gas'] = argument['gas']
-            if "base_buffer" in argument:
-                result['strategy']['base_buffer'] = argument['base_buffer']
-            if "concentration_limit" in argument:
-                result['strategy']['concentration_limit'] = argument['concentration_limit']
-            if "assumed_holding_days" in argument:
-                result["label_map"]["haircut_apy"]["horizons"] = [argument['assumed_holding_days']]
-            return result
+        result = VaultBacktestEngine.run_grid(parameter_grid, parameters)
 
-        def dict_list_to_combinations(d: dict) -> list:
-            keys = d.keys()
-            values = d.values()
-            combinations = [dict(zip(keys, combination)) for combination in product(*values)]
-            return combinations
-
-        # data
-        engine = build_ResearchEngine(parameters)
-        performance = pd.concat(engine.performance, axis=1)
-
-        result: list[dict] = list()
-        for cur_params in dict_list_to_combinations(parameter_grid):
-            new_parameter = modify_target_with_argument(parameters, cur_params)
-            name = pd.Series(cur_params)
-
-            engine = build_ResearchEngine(new_parameter)
-            # backtest truncatesand fillna performance to match start and end date
-            backtest = VaultBacktestEngine(performance, parameters['backtest'])
-
-            vault_rebalancing = YieldStrategy(research_engine=engine, params=new_parameter['strategy'])
-            cur_run = backtest.run(vault_rebalancing)
-
-            # print to file
-            name_to_str = ''.join(['{}_'.format(str(elem)) for elem in name]) + '_backtest'
-            VaultBacktestEngine.write_results(cur_run, os.path.join(os.sep, os.getcwd(), "logs"), name_to_str)
-
-            # insert in dict
-            result.append(pd.concat([pd.Series(cur_params), backtest.perf_analysis(cur_run)]))
-
-        pd.DataFrame(result).to_csv(
-            os.path.join(os.sep, os.getcwd(), "logs", 'grid.csv'))
+        try:
+            result.to_csv(
+                os.path.join(os.sep, os.getcwd(), "logs", 'grid.csv'))
+        except Exception as e:
+            result.to_csv(
+                os.path.join(os.sep, os.getcwd(), "logs", 'grid2.csv'))
 
     elif args[0] == 'cta':
         # load parameters
