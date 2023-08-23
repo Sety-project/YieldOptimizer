@@ -2,6 +2,8 @@ import sys
 import json
 import os
 from pathlib import Path
+
+import numpy as np
 import pandas as pd
 import pickle
 
@@ -22,13 +24,14 @@ if __name__ == "__main__":
             parameters = yaml.safe_load(fp)
 
         parameter_grid = {"cap": [0.3],
-                          "haflife": ["10d"],
-                          "cost_blind_optimization": [False, True],
+                          "haflife": ["3d", "10d", "30d"],
                           "cost": [0.0001, 0.0005, 0.001, 0.005],
-                          "gaz": [0.1, 40],
-                          "assumed_holding_days": [10, 30],
-                          "base_buffer": [0.0, 0.1],
-                          "concentration_limit": [0.4, 0.8]}
+                          "gaz": [False],
+                          "assumed_holding_days": [3, 10, 30, 9999],
+                          "base_buffer": [0.15],
+                          "concentration_limit": [1/np.sqrt(len(parameters['input_data']['selected_instruments'])),
+                                                  0.4,
+                                                  0.8]}
 
         result = VaultBacktestEngine.run_grid(parameter_grid, parameters)
 

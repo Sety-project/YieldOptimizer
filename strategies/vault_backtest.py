@@ -29,7 +29,7 @@ class VaultBacktestEngine:
             optimal_weights = rebalancing_strategy.optimal_weights(predicted_apys)
             transaction_costs, gas = rebalancing_strategy.update_wealth(optimal_weights, prev_state, prev_index, cur_performance.fillna(0.0))
 
-            prev_index = index
+            prev_index = deepcopy(index)
 
             self.record_result(index, predicted_apys, prev_state, rebalancing_strategy, transaction_costs, gas, result)
 
@@ -46,8 +46,6 @@ class VaultBacktestEngine:
                 result["run_parameters"]["models"]["haircut_apy"]["TrivialEwmPredictor"]["params"]['halflife'] = \
                 argument[
                     'haflife']
-            if "cost_blind_optimization" in argument:
-                result['strategy']['cost_blind_optimization'] = argument['cost_blind_optimization']
             if "cost" in argument:
                 result['strategy']['cost'] = argument['cost']
             if "gas" in argument:
