@@ -18,7 +18,7 @@ input_data:
   - "e6435aae-cbe9-4d26-ab2c-a4d533db9972" # aave-v3_WSTETH
   - "f1a22245-a1f1-4389-8ff2-dde4914b272d" # aave-v3_RETH
   - "fc7701fc-e290-4606-a8be-9e4ba6c5f91a" # convex-finance_ETH-RETH
-  - "e72916f7-a2d1-47ad-a4b9-2b054337cfd6" # instdapp morpho
+#  - "e72916f7-a2d1-47ad-a4b9-2b054337cfd6" # instdapp morpho
   start_date: '2022-06-15T00:00:00'
 run_parameters:
   normalize: false
@@ -28,8 +28,8 @@ run_parameters:
     haircut_apy:
       TrivialEwmPredictor:
         params:
-          cap: 0.3
-          halflife: 7d
+          cap: 0.3 # cap applied to outlier yield
+          halflife: 7d # ewm window for prediction
   pickle_file: engine.pickle
   unit_test: false
 feature_map: # each feature present here will be transformed. times are in days.
@@ -40,9 +40,8 @@ label_map:
     horizons: # only first is used for now
     - 10
 strategy:
-  cost_blind_optimization: true
   cost: 0.001 # 1e-4 is a bp
-  gas: 40 # in $
+  gas: false # in $
   base_buffer: 0.1 # relative to wealth
   concentration_limit: 0.5
   initial_wealth: 1000000
