@@ -20,7 +20,7 @@ class VaultBacktestEngine:
         Runs a backtest on one instrument.
         '''
 
-        result = {'pnl': [],'weights': [],'yields': [], 'pred_yields': []}
+        result = pd.DataFrame()
         prev_index = self.performance.index[0]
         for index, cur_performance in self.performance.iterrows():
             prev_state = deepcopy(rebalancing_strategy.state)
@@ -31,9 +31,10 @@ class VaultBacktestEngine:
 
             prev_index = deepcopy(index)
 
-            self.record_result(index, predicted_apys, prev_state, rebalancing_strategy, transaction_costs, gas, result)
+            new_entry = self.record_result(index, predicted_apys, prev_state, rebalancing_strategy, transaction_costs, gas)
+            result = result.append(new_entry.to_frame().T)
 
-        return {key: pd.DataFrame(list_series) for key, list_series in result.items()}
+        return result
 
     @staticmethod
     def run_grid(parameter_grid: dict, parameters: dict) -> pd.DataFrame:
@@ -43,9 +44,7 @@ class VaultBacktestEngine:
                 result["run_parameters"]["models"]["haircut_apy"]["TrivialEwmPredictor"]["params"]['cap'] = argument[
                     'cap']
             if "haflife" in argument:
-                result["run_parameters"]["models"]["haircut_apy"]["TrivialEwmPredictor"]["params"]['halflife'] = \
-                argument[
-                    'haflife']
+                result["run_parameters"]["models"]["haircut_apy"]["TrivialEwmPredictor"]["params"]['halflife'] = argument['haflife']
             if "cost" in argument:
                 result['strategy']['cost'] = argument['cost']
             if "gas" in argument:
@@ -65,14 +64,13 @@ class VaultBacktestEngine:
             return combinations
 
         # data
-        engine: ResearchEngine = build_ResearchEngine(parameters)
-        performance = pd.concat(engine.performance, axis=1)
         result: list[pd.Series] = list()
         for cur_params in dict_list_to_combinations(parameter_grid):
             new_parameter = modify_target_with_argument(parameters, cur_params)
             name = pd.Series(cur_params)
 
             engine = build_ResearchEngine(new_parameter)
+            performance = pd.concat(engine.performance, axis=1)
             # backtest truncatesand fillna performance to match start and end date
             backtest = VaultBacktestEngine(performance, parameters['backtest'])
 
@@ -80,54 +78,53 @@ class VaultBacktestEngine:
             cur_run = backtest.run(vault_rebalancing)
 
             # print to file
-            name_to_str = ''.join(['{}_'.format(str(elem)) for elem in name]) + '_backtest'
-            VaultBacktestEngine.write_results(cur_run, os.path.join(os.sep, os.getcwd(), "logs"), name_to_str)
+            name_to_str = ''.join(['{}_'.format(str(elem)) for elem in name]) + '_backtest.csv'
+            cur_run.to_csv(os.path.join(os.sep, os.getcwd(), "logs", name_to_str))
 
             # insert in dict
             result.append(pd.concat([pd.Series(cur_params), backtest.perf_analysis(cur_run)]))
 
         return pd.DataFrame(result)
 
-    def record_result(self, index, predicted_apys, prev_state, rebalancing_strategy, transaction_costs, gas, result):
+    def record_result(self, index, predicted_apys, prev_state, rebalancing_strategy, transaction_costs, gas) -> pd.Series:
         weights = {f'weight_{i}': weight
                    for i, weight in enumerate(prev_state.weights)}
-        performance = pd.concat(rebalancing_strategy.research_engine.performance, axis=1)
-        yields = {f'yield_{i}': perf
-                  for i, perf in enumerate(performance.loc[index].values)}
-        pred_yields = {f'pred_yield_{i}': predicted_apy
-                       for i, predicted_apy in enumerate(predicted_apys)}
+        weights = pd.Series(weights)
+        full_apy = pd.concat(rebalancing_strategy.research_engine.performance, axis=1)
+        haircut_apy = rebalancing_strategy.research_engine.Y
+
+        # yields = {f'haircut_apy_{i}': perf
+        #           for i, perf in enumerate(haircut_apy.loc[index].values)}
+        # pred_yields = {f'pred_haircut_apy_{i}': predicted_apy
+        #                for i, predicted_apy in enumerate(predicted_apys)}
+        # pred_yields = {f'apy_{i}': predicted_apy
+        #                for i, predicted_apy in enumerate(predicted_apys)}
         temp = dict()
-        temp['weights'] = pd.Series(name=index, data=weights
-                                                     | {f'weight_base': prev_state.wealth - sum(weights.values())})
-        eff_yield = np.dot(list(yields.values()),
-                           list(weights.values())) / max(1e-8,
-                                                         sum(weights.values()))
-        temp['yields'] = pd.Series(name=index, data=yields | {f'eff_yield': eff_yield})
-        eff_pred_yield = np.dot(list(pred_yields.values()),
-                                list(weights.values())) / max(1e-8,
-                                                              sum(weights.values()))
-        temp['pred_yields'] = pd.Series(name=index, data=pred_yields | {f'eff_pred_yield': eff_pred_yield})
+        temp['weights'] = weights.values
+        temp['haircut_apy'] = haircut_apy.loc[index].values
+        temp['pred_haircut_apy'] = predicted_apys
+        temp['full_apy'] = full_apy.loc[index].values
+
+        temp = pd.DataFrame(temp).fillna(0.0)
+
+        for col in ['full_apy', 'haircut_apy', 'pred_haircut_apy']:
+            temp.loc['total', col] = (temp[col] * temp['weights']).sum() / temp['weights'].apply(lambda x: np.clip(x, a_min= 1e-8, a_max=None)).sum()
+        temp.loc['total', 'weights'] = prev_state.wealth - weights.sum()
+
         predict_horizon = rebalancing_strategy.research_engine.label_map['haircut_apy']['horizons'][0]
-        temp['pnl'] = pd.Series(name=index, data=
+        pnl = pd.DataFrame({'pnl':
         {'wealth': prev_state.wealth,
          'tx_cost': transaction_costs,
          'gas': gas,
          'tracking_error': np.dot(prev_state.weights,
-                                  performance.rolling(predict_horizon).mean().shift(
+                                  haircut_apy.rolling(predict_horizon).mean().shift(
                                       -predict_horizon).loc[index] - predicted_apys)
-                           / max(1e-8, sum(prev_state.weights))})
-        for key, value in temp.items():
-            result[key].append(value)
+                           / max(1e-8, sum(prev_state.weights))}})
+        new_entry: pd.Series = pd.concat([temp.unstack(), pnl.unstack()], axis=0)
+        new_entry.name = index
+        return new_entry
 
-    @staticmethod
-    def write_results(df: dict[str, pd.DataFrame], dirname: str, filename: str):
-        '''
-        writes backtest results to a csv file
-        '''
-        for key, value in deepcopy(df).items():
-            value.columns = pd.MultiIndex.from_tuples([(key, col) for col in value.columns])
-        pd.concat(df.values(), axis=1).to_csv(os.path.join(os.sep, dirname, f'{filename}.csv'))
-    def perf_analysis(self, df: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    def perf_analysis(self, df: pd.DataFrame) -> pd.DataFrame:
         '''
         returns performance metrics for a backtest: perf, tx_cost, avg gini
         '''
