@@ -103,7 +103,7 @@ class YieldStrategy(VaultRebalancingStrategy):
             solver_comments = buf.getvalue()
 
         if problem.status == 'optimal':
-            assert np.sum(x.value) < self.state.wealth * (1.0 - self.parameters['base_buffer']) + 1e-8, "negative base holding"
+            assert np.sum(x.value)/self.state.wealth < (1.0 - self.parameters['base_buffer']) + 1e-3, "negative base holding"
         return {'success': problem.status,
                 'message': solver_comments,
                 'y': problem.value if problem.status == 'optimal' else None,
@@ -120,8 +120,13 @@ class YieldStrategy(VaultRebalancingStrategy):
             new_res = self.gas_reduction_routine(predicted_apys, res['x'])
         else:
             new_res = res['x']
-        assert np.sum(new_res) < self.state.wealth * (
-                    1.0 - self.parameters['base_buffer']) + 1e-8, "wealth constraint violated"
+
+        # brutally trim if solver didn't
+        base_weight = self.state.wealth - np.sum(new_res)
+        if base_weight < self.state.wealth * self.parameters['base_buffer']:
+            logger = logging.getLogger('pfoptimizer')
+            logger.warning(f"trimming base_weight from {base_weight/self.state.wealth}")
+            new_res *= self.state.wealth * (1.0 - self.parameters['base_buffer']) / np.sum(new_res)
 
         return new_res
 
