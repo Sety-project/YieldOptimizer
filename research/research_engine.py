@@ -637,7 +637,7 @@ def build_ResearchEngine(input_parameters) -> ResearchEngine:
 
     # record performance for use in backtest
     for instrument in file_data:
-        result.performance[instrument] = file_data[instrument]['haircut_apy']
+        result.performance[instrument] = file_data[instrument]['apy']
 
     result.build_X_Y(file_data, parameters['feature_map'], parameters['label_map'],
                      unit_test=parameters['run_parameters']['unit_test'])
