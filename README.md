@@ -21,7 +21,7 @@ ML library for mid-frequency trading, and DeFi yield portfolio optimization
 #### b) ./strategies/vault_backtest.py backtests vault_rebalancing.py
 ### 6) misc
 - defillama data and metadata lands in scrappers/defillama_history/data
-- ./config has a big json input parametrizing all the above
+- ./config has a big yaml input parametrizing all the above
 ### 7) guides
 - to install, run `pip install -r requirements.txt`
 - to run, run `python main.py`[command] [config file path]
