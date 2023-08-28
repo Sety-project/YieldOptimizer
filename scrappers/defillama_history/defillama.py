@@ -42,7 +42,8 @@ class FilteredDefiLlama(DefiLlama):
                               'ipor',
                               'notional',
                               'merkl',
-                              'asymetrix-protocol']
+                              'asymetrix-protocol',
+                              'vesper']
         protocol_filters = {
             #    'chain': lambda x: x in ['Ethereum','Multi-Chain'],
             'name': lambda x: x not in excluded_protocols,
@@ -186,7 +187,7 @@ class DynLst(FilteredDefiLlama):
             'project': lambda x: x in self.protocols['name'].unique(),
             'underlyingTokens': lambda x: all(
                 token.lower() in self.shortlisted_tokens.values() for token in x) if isinstance(x,
-                                                                                           list) else False,
+                                                                                           list) else True,
             'tvlUsd': lambda x: x > 3e6,
             #    'ilRisk': lambda x: not x == 'yes',
             #    'exposure': lambda x: x in ['single', 'multi'], # ignore
@@ -247,6 +248,10 @@ class DynYieldE(FilteredDefiLlama):
     #     'sUSD': '0x57ab1ec28d129707052df4df418d58a2d46d5f51',
     #     'eUSD': '0xa0d69e286b938e21cbf7e51d71f6a4c8918f482f',
     #     'crvUSD': '0x8092ac8f4fe9e147098632482598f5855b25ee2f',
+    # 'BLUSD': '0xb9d7dddca9a4ac480991865efef82e01273f79c3',
+    # 'FRAXBP': '0x3175df0976dfa876431c2e9ee6bc45b65d3473cc',
+    # '3CRV': '0x6c3f90f043a72fa612cbac8115ee7e52bde6e490',
+    # ,
     # }
 
     def filter_underlyings(self) -> dict:
@@ -256,18 +261,29 @@ class DynYieldE(FilteredDefiLlama):
                 'BUSD': '0x4fabb145d64652a948d72533023f6e7a623c7c53',
                 'FRAX': '0x853d955acef822db058eb8505911ed77f175b99e',
                 'LUSD': '0x5f98805a4e8be255a32880fdec7f6728c6568ba0',
-                'BLUSD': '0xb9d7dddca9a4ac480991865efef82e01273f79c3',
-                'FRAXBP': '0x3175df0976dfa876431c2e9ee6bc45b65d3473cc',
-                '3CRV': '0x6c3f90f043a72fa612cbac8115ee7e52bde6e490',
-                'sDAI': '0x83f20f44975d03b1b09e64809b757c47f942beea',
                 'MIM': '0x99d8a9c45b2eca8864373a26d1459e3dff1e17f3',
-                'crvUSD': '0x8092ac8f4fe9e147098632482598f5855b25ee2f',
                 'aUSDC': '0xbcca60bb61934080951369a648fb03df4f96263c',
                 'aUSDT': '0x3ed3b47dd13ec9a98b44e6204a523e766b225811',
                 'aDAI': '0x028171bca77440897b824ca71d1c56cac55b68a3',
                 'cUSDC': '0x39aa39c021dfbae8fac545936693ac917d5e7563',
                 'cUSDT': '0xf650c3d88d12db855b8bf7d11be6c55a4e07dcc9',
-                'cDAI': '0x5d3a536e4d6dbd6114cc1ead35777bab948e3643'}
+                'cDAI': '0x5d3a536e4d6dbd6114cc1ead35777bab948e3643',
+                'sDAI': '0x83f20f44975d03b1b09e64809b757c47f942beea'}
+
+    def filter_protocols(self, protocols):
+        return protocols[protocols['name'].isin([
+            'compound',
+            'morpho-compound'
+            'compound-v3',
+            'morpho-aave',
+            'convex-finance',
+            'uniswap-v3',
+            'uniswap-v2',
+            'aave-v2',
+            'aave-v3',
+            'curve-dex',
+            'spark',
+            'makerdao'])]
 
     def filter_pools(self, pools) -> pd.DataFrame:
         # shortlist pools
@@ -276,7 +292,7 @@ class DynYieldE(FilteredDefiLlama):
             'project': lambda x: x in self.protocols['name'].unique(),
             'underlyingTokens': lambda x: all(
                 token.lower() in self.shortlisted_tokens.values() for token in x) if isinstance(x,
-                                                                                           list) else False,
+                                                                                           list) else True,
             'tvlUsd': lambda x: x > 3e6,
             #    'ilRisk': lambda x: not x == 'yes',
             #    'exposure': lambda x: x in ['single', 'multi'], # ignore
@@ -310,7 +326,7 @@ class DynYieldB(FilteredDefiLlama):
             'project': lambda x: x in self.protocols['name'].unique(),
             'underlyingTokens': lambda x: all(
                 token.lower() in self.shortlisted_tokens.values() for token in x) if isinstance(x,
-                                                                                           list) else False,
+                                                                                           list) else True,
             'tvlUsd': lambda x: x > 1e6,
             #    'ilRisk': lambda x: not x == 'yes',
             #    'exposure': lambda x: x in ['single', 'multi'], # ignore
@@ -341,8 +357,8 @@ def compute_moments(apy: dict[str, pd.Series]) -> dict[str, pd.Series]:
 
 def get_historical_best_pools(apy: dict[str, pd.Series], max_rank: int, start: datetime, end: datetime) -> pd.DataFrame:
     # compute historical pool rank
-    apy_haircut_apy = pd.DataFrame({key: value['haircut_apy'] for key, value in apy.items()})
-    df = pd.DataFrame(apy_haircut_apy).fillna(method='ffill')
+    haircut_apy = pd.DataFrame({key: value['haircut_apy'] for key, value in apy.items()})
+    df = pd.DataFrame(haircut_apy).fillna(method='ffill')
     df = df[(df.index >= start)&(df.index <= end)]
     best_only = df[df.rank(axis=1, ascending=False)<max_rank]
     return best_only.dropna(how='all', axis=1)
