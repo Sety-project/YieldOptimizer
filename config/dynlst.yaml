@@ -1,12 +1,13 @@
 input_data:
   ResearchName: defillama
   dirpath:
-  - signal
+  - singularity
+  - midfreq
   - scrappers
   - defillama_history
   - data
   - DynLst
-  selected_instruments: # this comes from top5ever
+  selected_instruments: # this comes from top n ever
   - "42c02674-f7a2-4cb0-be3d-ade268838770" # balancer-v2_RETH-WETH
   - "4cc5df76-f81d-49fe-9e1e-4caa6a8dad0b" # balancer-v2_WSTETH-WETH
   - "5ce23e7e-3800-4c9c-ad30-6db3db0515a1" # convex-finance_ETH-STETH
@@ -25,10 +26,10 @@ run_parameters:
   cross_ewma: false
   groupby: false
   models:
-    haircut_apy:
+    apy:
       TrivialEwmPredictor:
         params:
-          cap: 0.3 # cap applied to outlier yield
+          cap: 0.1 # cap applied to outlier yield
           halflife: 7d # ewm window for prediction
   pickle_file: engine.pickle
   unit_test: false
@@ -36,7 +37,7 @@ feature_map: # each feature present here will be transformed. times are in days.
   haircut_apy:
     as_is:
 label_map:
-  haircut_apy:
+  apy:
     horizons: # only first is used for now
     - 10
 strategy:
