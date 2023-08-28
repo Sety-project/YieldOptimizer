@@ -40,7 +40,7 @@ class VaultRebalancingStrategy(ABC):
 
         if 'cost' in params:
             self.cost_wealth = np.full(N, params['cost'])
-            assumed_holding_days = research_engine.label_map['haircut_apy']['horizons']
+            assumed_holding_days = research_engine.label_map['apy']['horizons']
             if len(assumed_holding_days) > 1:
                 raise NotImplementedError
             if assumed_holding_days[0] is not None:

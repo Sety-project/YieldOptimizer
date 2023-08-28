@@ -32,7 +32,7 @@ class VaultBacktestEngine:
             prev_index = deepcopy(index)
 
             new_entry = self.record_result(index, predicted_apys, prev_state, rebalancing_strategy, transaction_costs, gas)
-            result = result.append(new_entry.to_frame().T)
+            result = pd.concat([result, new_entry.to_frame().T], axis=0)
 
         return result
 
@@ -41,10 +41,10 @@ class VaultBacktestEngine:
         def modify_target_with_argument(target: dict, argument: dict) -> dict:
             result = deepcopy(target)
             if "cap" in argument:
-                result["run_parameters"]["models"]["haircut_apy"]["TrivialEwmPredictor"]["params"]['cap'] = argument[
+                result["run_parameters"]["models"]["apy"]["TrivialEwmPredictor"]["params"]['cap'] = argument[
                     'cap']
-            if "haflife" in argument:
-                result["run_parameters"]["models"]["haircut_apy"]["TrivialEwmPredictor"]["params"]['halflife'] = argument['haflife']
+            if "halfife" in argument:
+                result["run_parameters"]["models"]["apy"]["TrivialEwmPredictor"]["params"]['halflife'] = argument['halfife']
             if "cost" in argument:
                 result['strategy']['cost'] = argument['cost']
             if "gas" in argument:
@@ -54,7 +54,7 @@ class VaultBacktestEngine:
             if "concentration_limit" in argument:
                 result['strategy']['concentration_limit'] = argument['concentration_limit']
             if "assumed_holding_days" in argument:
-                result["label_map"]["haircut_apy"]["horizons"] = [argument['assumed_holding_days']]
+                result["label_map"]["apy"]["horizons"] = [argument['assumed_holding_days']]
             return result
 
         def dict_list_to_combinations(d: dict) -> list[pd.DataFrame]:
@@ -79,7 +79,8 @@ class VaultBacktestEngine:
 
             # print to file
             name_to_str = ''.join(['{}_'.format(str(elem)) for elem in name]) + '_backtest.csv'
-            cur_run.to_csv(os.path.join(os.sep, os.getcwd(), "logs", name_to_str))
+            vault_name = parameters['input_data']['dirpath'][-1].lower()
+            cur_run.to_csv(os.path.join(os.sep, os.getcwd(), "logs", vault_name, name_to_str))
 
             # insert in dict
             result.append(pd.concat([pd.Series(cur_params), backtest.perf_analysis(cur_run)]))
@@ -111,7 +112,7 @@ class VaultBacktestEngine:
             temp.loc['total', col] = (temp[col] * temp['weights']).sum() / temp['weights'].apply(lambda x: np.clip(x, a_min= 1e-8, a_max=None)).sum()
         temp.loc['total', 'weights'] = prev_state.wealth - weights.sum()
 
-        predict_horizon = rebalancing_strategy.research_engine.label_map['haircut_apy']['horizons'][0]
+        predict_horizon = rebalancing_strategy.research_engine.label_map['apy']['horizons'][0]
         pnl = pd.DataFrame({'pnl':
         {'wealth': prev_state.wealth,
          'tx_cost': transaction_costs,

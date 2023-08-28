@@ -22,25 +22,28 @@ if __name__ == "__main__":
         # load parameters from yaml
         with open(args[1], 'r') as fp:
             parameters = yaml.safe_load(fp)
+        vault_name = args[1].split(os.sep)[-1].split('.')[0]
+        dirname = os.path.join(os.sep, os.getcwd(), "logs", vault_name)
+        if not os.path.isdir(dirname):
+            os.makedirs(dirname)
 
-        parameter_grid = {"cap": [0.3],
-                          "haflife": ["3d", "10d", "30d"],
+        parameter_grid = {"cap": [0.2, 9],
+                          "halflife": ["1s", "3d", "10d", "30d"],
                           "cost": [0.0001, 0.0005, 0.001, 0.005],
                           "gaz": [False],
-                          "assumed_holding_days": [3, 10, 30, 9999],
+                          "assumed_holding_days": [3, 8, 13, 18, 23, 28, 32, 9999],
                           "base_buffer": [0.15],
-                          "concentration_limit": [1/np.sqrt(len(parameters['input_data']['selected_instruments'])),
-                                                  0.4,
-                                                  0.8]}
+                          "concentration_limit": [0.4,
+                                                  0.7, 1.0]}
 
         result = VaultBacktestEngine.run_grid(parameter_grid, parameters)
 
         try:
             result.to_csv(
-                os.path.join(os.sep, os.getcwd(), "logs", 'grid.csv'))
+                os.path.join(os.sep, dirname, 'grid.csv'))
         except Exception as e:
             result.to_csv(
-                os.path.join(os.sep, os.getcwd(), "logs", 'grid2.csv'))
+                os.path.join(os.sep, dirname, 'grid2.csv'))
 
     elif args[0] == 'cta':
         # load parameters
