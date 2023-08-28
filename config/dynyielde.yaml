@@ -1,0 +1,71 @@
+input_data:
+  ResearchName: defillama
+  dirpath:
+  - singularity
+  - midfreq
+  - scrappers
+  - defillama_history
+  - data
+  - DynYieldE
+  selected_instruments: # this comes from top n ever
+  - "1343a280-7812-4bc3-8f98-d1c37e11d271" # morpho-aave_USDT
+  - "25171c4c-1877-449a-9f88-45a9f153ee31" # curve-dex_DAI-USDC-USDT
+  - "30339b96-be67-45e5-87cb-adcd91049803" # convex-finance_ADAI-AUSDC-AUSDT
+  - "325ad2d6-70b1-48d7-a557-c2c99a036f87" # morpho-aave_USDC
+  - "3665ee7e-6c5d-49d9-abb7-c47ab5d9d4ac" # aave-v3_DAI
+  - "3f6aa14f-eb0c-4738-bf74-8bc666f7d2b1" # curve-dex_FRAX-USDC
+  - "405d8dad-5c99-4c91-90d3-82813ade1ff1" # aave-v2_DAI
+  - "57647093-2868-4e65-97ab-9cae8ec74e7d" # compound_USDT
+  - "60d657c9-5f63-4771-a85b-2cf8d507ec00" # aave-v2_USDT
+  - "7394f1bc-840a-4ff0-9e87-5e0ef932943a" # convex-finance_DAI-USDC-USDT
+  - "802d35a2-5bae-456f-a2a9-4e1b48e0dec5" # uniswap-v3_DAI-USDT
+  - "8ec9e3e2-1eb5-4c47-82de-edcc825ca4cc" # curve-dex_CDAI-CUSDC
+  - "a349fea4-d780-4e16-973e-70ca9b606db2" # aave-v2_USDC
+  - "a86ee795-54d9-4812-9148-b312967cefe5" # uniswap-v2_DAI-USDC
+  - "aa70268e-4b52-42bf-a116-608b370f9501" # aave-v3_USDC
+  - "b8bcdf8e-96ed-40ca-a7aa-aa048b9874e5" # morpho-aave_DAI
+  - "bd072651-d99c-4154-aeae-51f12109c054" # convex-finance_FRAX-USDC
+  - "c8a24fee-ec00-4f38-86c0-9f6daebc4225" # makerdao_DAI
+  - "cc110152-36c2-4e10-9c12-c5b4eb662143" # compound_DAI
+  - "cefa9bb8-c230-459a-a855-3b94e96acd8c" # compound_USDC
+  - "d6e3dd14-0495-4aec-b226-ae98215dcd38" # uniswap-v3_DAI-FRAX
+  - "e2c09021-0aa8-42b6-a596-5422c2e35399" # uniswap-v2_USDC-USDT
+  - "e3f861c0-c2b9-4b50-b799-a036a3f11da1" # curve-dex_ADAI-AUSDC-AUSDT
+  - "f981a304-bb6c-45b8-b0c5-fd2f515ad23a" # aave-v3_USDT
+  start_date: '2022-06-15T00:00:00'
+run_parameters:
+  normalize: false
+  cross_ewma: false
+  groupby: false
+  models:
+    apy:
+      TrivialEwmPredictor:
+        params:
+          cap: 0.2 # cap applied to outlier yield
+          halflife: 7d # ewm window for prediction
+  pickle_file: engine.pickle
+  unit_test: false
+feature_map: # each feature present here will be transformed. times are in days.
+  haircut_apy:
+    as_is:
+label_map:
+  apy:
+    horizons: # only first is used for now
+    - 30
+strategy:
+  cost: 0.0005 # 1e-4 is a bp
+  gas: false # in $
+  base_buffer: 0.15 # relative to wealth
+  concentration_limit: 0.4
+  initial_wealth: 1000000
+  solver_params:
+    solver: "ECOS"
+    verbose: false
+    warm_start: false
+    max_iters: 1000
+    abstol: 1
+    reltol: 0.01
+    feastol: 0.01
+backtest:
+  start_date: '2023-02-21T00:00:00'
+  end_date: '2023-08-21T00:00:00'
