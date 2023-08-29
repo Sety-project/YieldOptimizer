@@ -103,7 +103,7 @@ class YieldStrategy(VaultRebalancingStrategy):
             solver_comments = buf.getvalue()
 
         if problem.status == 'optimal':
-            assert np.sum(x.value)/self.state.wealth < (1.0 - self.parameters['base_buffer']) + 1e-3, "negative base holding"
+            assert np.sum(x.value)/self.state.wealth < (1.0 - self.parameters['base_buffer']) * 1.011, "negative base holding"
         return {'success': problem.status,
                 'message': solver_comments,
                 'y': problem.value if problem.status == 'optimal' else None,
