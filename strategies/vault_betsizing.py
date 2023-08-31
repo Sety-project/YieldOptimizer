@@ -8,11 +8,14 @@ from datetime import timedelta, datetime
 import sklearn
 import scipy
 import cvxpy as cp
+from cvxpy import error as cvxerror
 import io
+from utils.api_utils import build_logging
 from contextlib import redirect_stdout
 from research.research_engine import ResearchEngine
 
 run_date = datetime.now()
+build_logging('defillama')
 
 class State:
     '''
@@ -75,10 +78,8 @@ class YieldStrategy(VaultRebalancingStrategy):
         '''
         uses research engine to predict apy at index
         '''
-        history = self.research_engine.X[self.research_engine.X.index <= index]
         model: sklearn.base.BaseEstimator = list(self.research_engine.fitted_model.values())[0]
-        predicted_apys = model.predict(history)
-        return predicted_apys
+        return model.predict(index)
 
 
     def solve_cvx_problem(self, predicted_apys, **kwargs):
@@ -98,14 +99,21 @@ class YieldStrategy(VaultRebalancingStrategy):
 
         # Solve the problem and print stdout
         problem = cp.Problem(objective, constraints)
-        with io.StringIO() as buf, redirect_stdout(buf):
+        if kwargs['verbose']:
+            with io.StringIO() as buf, redirect_stdout(buf):
+                try:
+                    problem.solve(**kwargs)
+                except cvxerror.SolverError as e:
+                    logging.getLogger('defillama').warning(buf.getvalue())
+
+        else:
             problem.solve(**kwargs)
-            solver_comments = buf.getvalue()
+
 
         if problem.status == 'optimal':
             assert np.sum(x.value)/self.state.wealth < (1.0 - self.parameters['base_buffer']) * 1.011, "negative base holding"
+
         return {'success': problem.status,
-                'message': solver_comments,
                 'y': problem.value if problem.status == 'optimal' else None,
                 'x': x.value if problem.status == 'optimal' else None}
 
@@ -124,7 +132,7 @@ class YieldStrategy(VaultRebalancingStrategy):
         # brutally trim if solver didn't
         base_weight = self.state.wealth - np.sum(new_res)
         if base_weight < self.state.wealth * self.parameters['base_buffer']:
-            logger = logging.getLogger('pfoptimizer')
+            logger = logging.getLogger('defillama')
             logger.warning(f"trimming base_weight from {base_weight/self.state.wealth}")
             new_res *= self.state.wealth * (1.0 - self.parameters['base_buffer']) / np.sum(new_res)
 

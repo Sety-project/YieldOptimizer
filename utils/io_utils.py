@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 from utils.async_utils import async_wrap
 import functools
+from copy import deepcopy
+from itertools import product
 import retry
 import logging
 import json
 import pandas as pd
 import numpy as np
 import collections
+import time
 # this is for jupyter
 # import cufflinks as cf
 # cf.go_offline()
@@ -55,3 +58,45 @@ class NpEncoder(json.JSONEncoder):
         if isinstance(obj, pd.Timestamp):
             return obj.isoformat()
         return super(NpEncoder, self).default(obj)
+
+def modify_target_with_argument(target: dict, argument: dict) -> dict:
+    result = deepcopy(target)
+    if "cap" in argument:
+        result["run_parameters"]["models"]["apy"]["TrivialEwmPredictor"]["params"]['cap'] = argument[
+            'cap']
+    if "halflife" in argument:
+        result["run_parameters"]["models"]["apy"]["TrivialEwmPredictor"]["params"]['halflife'] = argument['halflife']
+    if "cost" in argument:
+        result['strategy']['cost'] = argument['cost']
+    if "gas" in argument:
+        result['strategy']['gas'] = argument['gas']
+    if "base_buffer" in argument:
+        result['strategy']['base_buffer'] = argument['base_buffer']
+    if "concentration_limit" in argument:
+        result['strategy']['concentration_limit'] = argument['concentration_limit']
+    if "verbose" in argument:
+        result['strategy']['solver_params']['verbose'] = argument['verbose']
+    if "assumed_holding_days" in argument:
+        result["label_map"]["apy"]["horizons"] = [argument['assumed_holding_days']]
+    return result
+
+def dict_list_to_combinations(d: dict) -> list[pd.DataFrame]:
+    keys = d.keys()
+    values = d.values()
+    combinations = [dict(zip(keys, combination)) for combination in product(*values)]
+    return combinations
+
+import time
+
+def profile(filename):
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            start_time = time.time()
+            result = func(*args, **kwargs)
+            end_time = time.time()
+            with open(filename, 'a') as f:
+                f.write(f"{func.__name__}, {end_time - start_time:.6f}\n")
+            return result
+        return wrapper
+    return decorator
+

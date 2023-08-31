@@ -64,8 +64,8 @@ strategy:
     warm_start: false
     max_iters: 1000
     abstol: 1
-    reltol: 0.01
-    feastol: 0.01
+    reltol: 0.001
+    feastol: 0.001
 backtest:
   start_date: '2023-02-21T00:00:00'
   end_date: '2023-08-21T00:00:00'

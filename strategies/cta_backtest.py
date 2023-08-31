@@ -3,7 +3,7 @@ from typing import Union
 from datetime import timedelta
 import numpy as np
 import pandas as pd
-from strategies.cta_strategy import SingleAssetStrategy
+from strategies.cta_betsizing import SingleAssetStrategy
 from research.research_engine import ResearchEngine
 
 class BacktestEngine:

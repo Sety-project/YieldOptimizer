@@ -29,29 +29,29 @@ run_parameters:
     apy:
       TrivialEwmPredictor:
         params:
-          cap: 0.1 # cap applied to outlier yield
+          cap: 0.2 # cap applied to outlier yield
           halflife: 7d # ewm window for prediction
   pickle_file: engine.pickle
   unit_test: false
 feature_map: # each feature present here will be transformed. times are in days.
-  haircut_apy:
+  apy:
     as_is:
 label_map:
   apy:
     horizons: # only first is used for now
-    - 10
+    - 9999
 strategy:
   cost: 0.001 # 1e-4 is a bp
   gas: false # in $
-  base_buffer: 0.1 # relative to wealth
-  concentration_limit: 0.5
+  base_buffer: 0.15 # relative to wealth
+  concentration_limit: 1.0
   initial_wealth: 1000000
   solver_params:
     solver: "ECOS"
     verbose: false
     warm_start: false
     max_iters: 100
-    abstol: 1
+    abstol: 100
     reltol: 0.01
     feastol: 0.01
 backtest:

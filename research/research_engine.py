@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from typing import NewType, Union, Iterator, Callable
 from abc import abstractmethod
 from pathlib import Path
-
+from utils.io_utils import profile
 import dateutil.parser
 import numpy as np
 import pandas as pd
@@ -501,15 +501,31 @@ class TrivialEwmPredictor(sklearn.base.BaseEstimator):
     def __init__(self, halflife: str, cap: float):
         self.halflife = pd.Timedelta(halflife)
         self.cap = cap
+        self.distribution: dict[datetime, multivariate_normal] = dict()
 
-    def predict(self, raw_X: pd.DataFrame) -> Callable:
-        return self.predict_proba(raw_X).mean
-    def predict_proba(self, raw_X: pd.DataFrame) -> Callable:
+    def predict(self, index: datetime) -> np.array:
+        return self.distribution[index].mean
+
+    def fit(self, raw_X: pd.DataFrame) -> None:
         '''
         only predicts one time
         mere gaussian distribution, but we exclude spikes
         '''
-        X = raw_X.applymap(lambda x: min(x, self.cap))
+        # select only rows of X that deviate from mean by less than 3 stdev
+        mean = raw_X.ewm(times=raw_X.index, halflife=self.halflife).mean()
+        stdev = raw_X.ewm(times=raw_X.index, halflife=self.halflife).std()
+        X = pd.DataFrame(index=raw_X.index, columns=raw_X.columns)
+        for col in X.columns:
+            mask = np.abs(raw_X[col] - mean[col]) <= 3 * stdev[col]
+            X[col] = np.where(mask, raw_X[col], mean[col])
+        mean = X.ewm(times=X.index, halflife=self.halflife).mean()
+        # TODO: implement cov
+        cov = np.identity(X.shape[1])
+
+        self.distribution = {index: multivariate_normal(mean=mean.loc[index], cov=cov, allow_singular=True)
+                             for index in mean.index}
+        return
+
         decay = pd.Series(index=X.index, data=np.exp(
             -(X.index[-1] - X.index) / self.halflife))
         decayed_X = X.mul(decay, axis=0)
@@ -522,6 +538,7 @@ class TrivialEwmPredictor(sklearn.base.BaseEstimator):
                 mean = outlier_remover.location_/decay.sum()
                 cov = outlier_remover.covariance_/(decay * decay).sum()
             else:
+                # we take the std over entire history !
                 mean = (decayed_X.sum()/decay.sum())
                 cov = decayed_X.cov()/(decay * decay).sum()
 
@@ -537,8 +554,7 @@ class TrivialEwmPredictor(sklearn.base.BaseEstimator):
         else:
             mean = decayed_X.squeeze().fillna(0.0).values
             cov = np.identity(raw_X.shape[1])
-        return multivariate_normal(mean=mean, cov=cov, allow_singular=True)
-
+        self.distribution = multivariate_normal(mean=mean, cov=cov, allow_singular=True)
 
 class DefillamaResearchEngine(ResearchEngine):
     '''
@@ -597,9 +613,9 @@ class DefillamaResearchEngine(ResearchEngine):
             for model_name, model_params in self.run_parameters['models'][raw_feature].items():
                 model_obj = globals()[model_name](**model_params['params'])
                 # no fit needed for trivial model
-                fitted_model = model_obj
+                model_obj.fit(self.X)
                 split_index = 0
-                self.fitted_model[(raw_feature, frequency, model_name, split_index)] = copy.deepcopy(fitted_model)
+                self.fitted_model[(raw_feature, frequency, model_name, split_index)] = copy.deepcopy(model_obj)
 
 
 def model_analysis(engine: ResearchEngine):

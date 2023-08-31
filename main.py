@@ -11,7 +11,7 @@ import yaml
 
 from research.research_engine import build_ResearchEngine, model_analysis
 from strategies.vault_backtest import VaultBacktestEngine
-from strategies.cta_strategy import SingleAssetStrategy
+from strategies.cta_betsizing import SingleAssetStrategy
 from strategies.cta_backtest import BacktestEngine
 from utils.api_utils import extract_args_kwargs
 
@@ -35,6 +35,14 @@ if __name__ == "__main__":
                           "base_buffer": [0.15],
                           "concentration_limit": [0.4,
                                                   0.7, 1.0]}
+
+        parameter_grid = {"cap": [0.2],
+                          "halflife": ["30d"],
+                          "cost": [0.0005],
+                          "gaz": [False],
+                          "assumed_holding_days": [9999],
+                          "base_buffer": [0.15],
+                          "concentration_limit": [1.0]}
 
         result = VaultBacktestEngine.run_grid(parameter_grid, parameters)
 
