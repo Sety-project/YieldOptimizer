@@ -85,13 +85,13 @@ class YieldStrategy(VaultRebalancingStrategy):
     def solve_cvx_problem(self, predicted_apys, **kwargs):
         # Define the variables and parameters
         N = len(predicted_apys)
-        x = cp.Variable(shape=N, nonneg=True, value=deepcopy(self.state.weights))
+        x = cp.Variable(shape=N, nonneg=True, value=deepcopy(self.state.weights/self.state.wealth))
         a = cp.Parameter(shape=N, nonneg=True, value=predicted_apys)
-        x0 = cp.Parameter(shape=N, nonneg=True, value=self.state.weights)
+        x0 = cp.Parameter(shape=N, nonneg=True, value=self.state.weights/self.state.wealth)
         # cost_optimization plays in the objective, BUT NOT in update_wealth
         cost = cp.Parameter(shape=N, nonneg=True, value=self.cost_optimization)
-        max_x = cp.Parameter(shape=N, nonneg=True, value=[self.state.wealth * self.parameters['concentration_limit']]*N)
-        max_sumx = cp.Parameter(value=self.state.wealth * (1.0 - self.parameters['base_buffer']))
+        max_x = cp.Parameter(shape=N, nonneg=True, value=[self.parameters['concentration_limit']]*N)
+        max_sumx = cp.Parameter(value=(1.0 - self.parameters['base_buffer']))
 
         # Define the DCP expression. TODO:Trick y to make DPP compliant using y ?
         objective = cp.Minimize(-a @ x + cost @ cp.abs(x - x0))
@@ -111,11 +111,11 @@ class YieldStrategy(VaultRebalancingStrategy):
 
 
         if problem.status == 'optimal':
-            assert np.sum(x.value)/self.state.wealth < (1.0 - self.parameters['base_buffer']) * 1.011, "negative base holding"
+            assert np.sum(x.value) < 1.0, "negative base holding"
 
         return {'success': problem.status,
                 'y': problem.value if problem.status == 'optimal' else None,
-                'x': x.value if problem.status == 'optimal' else None}
+                'x': x.value * self.state.wealth if problem.status == 'optimal' else None}
 
     def optimal_weights(self, predicted_apys: np.array) -> np.array:
         '''
