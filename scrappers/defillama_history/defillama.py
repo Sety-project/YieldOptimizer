@@ -12,6 +12,8 @@ from abc import abstractmethod
 import pandas as pd
 from defillama2 import DefiLlama
 
+import requests
+import json
 class FilteredDefiLlama(DefiLlama):
     '''
     filters protocols and pools from defillama
@@ -77,15 +79,16 @@ class FilteredDefiLlama(DefiLlama):
             if metadata['rewardTokens'] not in [None, []]:
                 token_addrs_n_chains = {rewardToken: metadata['chain'] for rewardToken in metadata['rewardTokens']}
                 reward_discount = await self.discount_reward_by_minmax(token_addrs_n_chains, **kwargs)
+                interpolated_discount = \
+                reward_discount.reindex(apyReward.index.union(reward_discount.index)).interpolate().loc[apyReward.index]
+                apyReward = apyReward.interpolate(method='linear').fillna(0)
+                haircut_apy = apy - (1 - interpolated_discount) * apyReward
+        else:
+            haircut_apy = apy
 
         # pathetic attempt at IL...
         il = pool_history['il7d'].fillna(0) * 52
         tvl = pool_history['tvlUsd']
-
-        # align discount function to apyReward
-        interpolated_discount = reward_discount.reindex(apyReward.index.union(reward_discount.index)).interpolate().loc[apyReward.index]
-        apyReward = apyReward.interpolate(method='linear').fillna(0)
-        haircut_apy = apy - (1-interpolated_discount) * apyReward
 
         result = pd.DataFrame({'haircut_apy': haircut_apy,
                 'apy': apy,
@@ -107,8 +110,21 @@ class FilteredDefiLlama(DefiLlama):
         kwargs_reward_history = deepcopy(kwargs['reward_history'])
         discount_lookback = kwargs_reward_history.pop('discount_lookback')
 
-        reward_history = await async_wrap(self.get_prices_at_regular_intervals)(token_addrs_n_chains,
-                                                                                **kwargs_reward_history)
+        try:
+            def get_price_time_series(token_address, **kwargs_reward_history):
+                url = 'https://api.coingecko.com/api/v3/coins/ethereum/contract/{}/market_chart/?vs_currency=usd&days={}'.format(token_address, kwargs_reward_history['span'])
+                response = requests.get(url)
+                data = json.loads(response.text)
+                result = pd.Series(name=token_address,
+                                   index=[pd.to_datetime(x[0]*1e6) for x in data['prices']],
+                                   data=[x[1] for x in data['prices']])
+                return result
+
+            reward_history = pd.concat([get_price_time_series(address, **kwargs_reward_history)
+                                                for address in token_addrs_n_chains.keys()],
+                                       axis=1).ffill()
+        except Exception as e:
+            reward_history = self.get_prices_at_regular_intervals(token_addrs_n_chains, **kwargs_reward_history)
 
         reward_discount = pd.DataFrame()
         for rewardToken in reward_history.columns:
@@ -168,7 +184,7 @@ class DynLst(FilteredDefiLlama):
             'balancer-v2',
             'curve-finance',
             'convex-finance',
-            'instadapp'])]
+            'aura'])]
     def filter_underlyings(self):
         '''filter tokens that are not in the shortlist'''
         return {'stETH': '0xae7ab96520de3a18e5e111b5eaab095312d7fe84',
@@ -283,7 +299,9 @@ class DynYieldE(FilteredDefiLlama):
             'aave-v3',
             'curve-dex',
             'spark',
-            'makerdao'])]
+            'makerdao',
+            'balancer',
+            'aura'])]
 
     def filter_pools(self, pools) -> pd.DataFrame:
         # shortlist pools
@@ -317,8 +335,15 @@ class DynYieldB(FilteredDefiLlama):
         return {'USDC': '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d',
                 'USDT': '0x55d398326f99059ff775485246999027b3197955',
                 'DAI': '0x1af3f329e8be154074d8769d1ffa4ee058b1dbc3',
-                'BUSD': '0xe9e7cea3dedca5984780bafc599bd69add087d56',}
+                'BUSD': '0xe9e7cea3dedca5984780bafc599bd69add087d56'}
 
+    def filter_protocols(self, protocols):
+        return protocols[protocols['name'].isin(['stargate',
+                                                 'venus',
+                                                 'pancakeswap-amm-v3',
+                                                 'wing-finance',
+                                                 'thena-v1',
+                                                 'pancakeswap-amm'])]
     def filter_pools(self, pools) -> pd.DataFrame:
         # shortlist pools
         pool_filters = {
@@ -326,7 +351,7 @@ class DynYieldB(FilteredDefiLlama):
             'project': lambda x: x in self.protocols['name'].unique(),
             'underlyingTokens': lambda x: all(
                 token.lower() in self.shortlisted_tokens.values() for token in x) if isinstance(x,
-                                                                                           list) else True,
+                                                                                           list) else False,
             'tvlUsd': lambda x: x > 1e6,
             #    'ilRisk': lambda x: not x == 'yes',
             #    'exposure': lambda x: x in ['single', 'multi'], # ignore
@@ -392,14 +417,14 @@ if __name__ == '__main__':
             os.makedirs(dirname)
         date_format = '%Y-%m-%d %H:%M:%S %Z'
         end = datetime.now().replace(tzinfo=timezone.utc)
-        start = end - timedelta(days=90)
+        start = end - timedelta(days=365)
         history_kwargs = {'dirname': dirname,
-                          'reward_history':
-                              {'discount_lookback': timedelta(days=90),
-                               'end': end.strftime(date_format),
-                               'end_format': date_format,
-                               'span': 900,
-                               'period': '1d'}
+                          #'reward_history': None
+                              # {'discount_lookback': timedelta(days=90),
+                              #  'end': end.strftime(date_format),
+                              #  'end_format': date_format,
+                              #  'span': 900,
+                              #  'period': '1d'}
                           }
 
         # fetch everything asynchronously

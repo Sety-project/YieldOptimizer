@@ -6,22 +6,14 @@ input_data:
   - scrappers
   - defillama_history
   - data
-  - DynLst
+  - DynYieldB
   selected_instruments: # this comes from top n ever
-  - "42c02674-f7a2-4cb0-be3d-ade268838770" # balancer-v2_RETH-WETH
-  - "4cc5df76-f81d-49fe-9e1e-4caa6a8dad0b" # balancer-v2_WSTETH-WETH
-  - "6d342d6a-9796-443e-8152-b94e8b6021fc" # convex-finance_ETH-FRXETH
-  - "747c1d2a-c668-4682-b9f9-296708a3dd90" # lido_STETH
-  - "77020688-e1f9-443c-9388-e51ace15cc32" # frax-ether_SFRXETH
-  - "98463e86-e32c-4998-830c-ccd47dbb3041" # aura_WSTETH-WETH
-  - "a4b5b995-99e7-4b8f-916d-8940b5627d70" # aura_RETH-WETH
-  - "c9873dab-0979-478c-b48c-3c3a0c935449" # convex-finance_STETH-FRXETH
-  - "ce70e358-6668-498c-9afa-651f770eac27" # aura_WSTETH-SFRXETH-RETH
-  - "d4b3c522-6127-4b89-bedf-83641cdcd2eb" # rocket-pool_RETH
-  - "e378a7c2-6285-4993-9397-87ac9c8adc15" # convex-finance_ETH-STETH
-  - "e6435aae-cbe9-4d26-ab2c-a4d533db9972" # aave-v3_WSTETH
-  - "f1a22245-a1f1-4389-8ff2-dde4914b272d" # aave-v3_RETH
-  - "fc7701fc-e290-4606-a8be-9e4ba6c5f91a" # convex-finance_ETH-RETH
+  - "0e66dcfe-c01e-4c3b-81f9-99e0a6ab0903" # pancakeswap-amm-v3_USDC-BUSD
+  - "282baaa9-11ef-4e72-8ade-efe0c43c07cc" # pancakeswap-amm-v3_USDT-USDC
+  - "89eba1e5-1b1b-47b6-958b-38138a04c244" # venus_USDC
+  - "9f0f4cbd-5a26-4eb8-b720-3691b42b0e56" # pancakeswap-amm-v3_USDT-BUSD
+  - "9f3a6015-5045-4471-ba65-ad3dc7c38269" # venus_USDT
+  - "b2e9d5fe-19ca-456b-8cd5-c296d635136f" # pancakeswap-amm-v3_USDT-USDC
   start_date: '2022-09-15T00:00:00'
 run_parameters:
   normalize: false
@@ -41,7 +33,7 @@ feature_map: # each feature present here will be transformed. times are in days.
 label_map:
   apy:
     horizons: # only first is used for now
-    - 28
+      - 28
 strategy:
   cost: 0.001 # 1e-4 is a bp
   gas: false # in $

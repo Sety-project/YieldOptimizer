@@ -32,7 +32,7 @@ input_data:
   - "e2c09021-0aa8-42b6-a596-5422c2e35399" # uniswap-v2_USDC-USDT
   - "e3f861c0-c2b9-4b50-b799-a036a3f11da1" # curve-dex_ADAI-AUSDC-AUSDT
   - "f981a304-bb6c-45b8-b0c5-fd2f515ad23a" # aave-v3_USDT
-  start_date: '2022-06-15T00:00:00'
+  start_date: '2022-09-15T00:00:00'
 run_parameters:
   normalize: false
   cross_ewma: false
@@ -41,31 +41,31 @@ run_parameters:
     apy:
       TrivialEwmPredictor:
         params:
-          cap: 0.2 # cap applied to outlier yield
+          cap: 3 # stdev threshold of outlier yield
           halflife: 7d # ewm window for prediction
   pickle_file: engine.pickle
   unit_test: false
 feature_map: # each feature present here will be transformed. times are in days.
-  haircut_apy:
+  apy:
     as_is:
 label_map:
   apy:
     horizons: # only first is used for now
-    - 30
+      - 28
 strategy:
-  cost: 0.0005 # 1e-4 is a bp
+  cost: 0.001 # 1e-4 is a bp
   gas: false # in $
   base_buffer: 0.15 # relative to wealth
-  concentration_limit: 0.4
+  concentration_limit: 0.7
   initial_wealth: 1000000
   solver_params:
     solver: "ECOS"
     verbose: false
     warm_start: false
-    max_iters: 1000
-    abstol: 1
-    reltol: 0.001
-    feastol: 0.001
+    max_iters: 100
+    abstol: 0.01
+    reltol: 0.01
+    feastol: 0.01
 backtest:
-  start_date: '2023-02-21T00:00:00'
-  end_date: '2023-08-21T00:00:00'
+  start_date: '2022-09-01T00:00:00'
+  end_date: '2023-09-01T00:00:00'
