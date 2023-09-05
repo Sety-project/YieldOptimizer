@@ -516,45 +516,46 @@ class TrivialEwmPredictor(sklearn.base.BaseEstimator):
         stdev = raw_X.ewm(times=raw_X.index, halflife=self.halflife).std()
         X = pd.DataFrame(index=raw_X.index, columns=raw_X.columns)
         for col in X.columns:
-            mask = np.abs(raw_X[col] - mean[col]) <= 3 * stdev[col]
+            mask = np.abs(raw_X[col] - mean[col]) <= self.cap * stdev[col]
             X[col] = np.where(mask, raw_X[col], mean[col])
-        mean = X.ewm(times=X.index, halflife=self.halflife).mean()
+        # fillna implies pools that do not yet exist have 0 yield
+        mean = X.ewm(times=X.index, halflife=self.halflife).mean().fillna(0.0)
         # TODO: implement cov
         cov = np.identity(X.shape[1])
 
         self.distribution = {index: multivariate_normal(mean=mean.loc[index], cov=cov, allow_singular=True)
                              for index in mean.index}
         return
-
-        decay = pd.Series(index=X.index, data=np.exp(
-            -(X.index[-1] - X.index) / self.halflife))
-        decayed_X = X.mul(decay, axis=0)
-        if raw_X.shape[0] > 1:
-            if False:
-                # TODO: remove outliers and interpolate them
-                outlier_remover = MinCovDet().fit(raw_X)
-                # decayed_X[~outlier_remover.support_] = np.nan
-                # decayed_X = decayed_X.interpolate(method='linear')
-                mean = outlier_remover.location_/decay.sum()
-                cov = outlier_remover.covariance_/(decay * decay).sum()
-            else:
-                # we take the std over entire history !
-                mean = (decayed_X.sum()/decay.sum())
-                cov = decayed_X.cov()/(decay * decay).sum()
-
-                # some series may have NaNs. cleanup.
-                mean = mean.fillna(0.0).values
-                for i in range(cov.shape[0]):
-                    if np.isnan(cov.iloc[i, i]):
-                        cov.iloc[i, i] = 1.0
-                cov = cov.fillna(0.0)
-
-                #TODO: somehow still not posdef...give up for now
-                cov = np.eye(raw_X.shape[1])
-        else:
-            mean = decayed_X.squeeze().fillna(0.0).values
-            cov = np.identity(raw_X.shape[1])
-        self.distribution = multivariate_normal(mean=mean, cov=cov, allow_singular=True)
+        #
+        # decay = pd.Series(index=X.index, data=np.exp(
+        #     -(X.index[-1] - X.index) / self.halflife))
+        # decayed_X = X.mul(decay, axis=0)
+        # if raw_X.shape[0] > 1:
+        #     if False:
+        #         # TODO: remove outliers and interpolate them
+        #         outlier_remover = MinCovDet().fit(raw_X)
+        #         # decayed_X[~outlier_remover.support_] = np.nan
+        #         # decayed_X = decayed_X.interpolate(method='linear')
+        #         mean = outlier_remover.location_/decay.sum()
+        #         cov = outlier_remover.covariance_/(decay * decay).sum()
+        #     else:
+        #         # we take the std over entire history !
+        #         mean = (decayed_X.sum()/decay.sum())
+        #         cov = decayed_X.cov()/(decay * decay).sum()
+        #
+        #         # some series may have NaNs. cleanup.
+        #         mean = mean.fillna(0.0).values
+        #         for i in range(cov.shape[0]):
+        #             if np.isnan(cov.iloc[i, i]):
+        #                 cov.iloc[i, i] = 1.0
+        #         cov = cov.fillna(0.0)
+        #
+        #         #TODO: somehow still not posdef...give up for now
+        #         cov = np.eye(raw_X.shape[1])
+        # else:
+        #     mean = decayed_X.squeeze().fillna(0.0).values
+        #     cov = np.identity(raw_X.shape[1])
+        # self.distribution = multivariate_normal(mean=mean, cov=cov, allow_singular=True)
 
 class DefillamaResearchEngine(ResearchEngine):
     '''

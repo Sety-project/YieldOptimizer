@@ -27,7 +27,7 @@ if __name__ == "__main__":
         if not os.path.isdir(dirname):
             os.makedirs(dirname)
 
-        parameter_grid = {"cap": [0.2, 9],
+        parameter_grid = {"cap": [3, 999],
                           "halflife": ["1s", "3d", "10d", "30d"],
                           "cost": [0.0001, 0.0005, 0.001, 0.005],
                           "gaz": [False],
@@ -36,13 +36,13 @@ if __name__ == "__main__":
                           "concentration_limit": [0.4,
                                                   0.7, 1.0]}
 
-        parameter_grid = {"cap": [0.2],
-                          "halflife": ["30d"],
-                          "cost": [0.0005],
-                          "gaz": [False],
-                          "assumed_holding_days": [9999],
-                          "base_buffer": [0.15],
-                          "concentration_limit": [1.0]}
+        # parameter_grid = {"cap": [0.2],
+        #                   "halflife": ["30d"],
+        #                   "cost": [0.0005],
+        #                   "gaz": [False],
+        #                   "assumed_holding_days": [9999],
+        #                   "base_buffer": [0.15],
+        #                   "concentration_limit": [1.0]}
 
         result = VaultBacktestEngine.run_grid(parameter_grid, parameters)
 
