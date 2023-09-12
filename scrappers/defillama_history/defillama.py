@@ -2,18 +2,58 @@
 import logging
 import numbers
 import os
+import shutil
 import sys
 import asyncio
 from copy import deepcopy
+from typing import Callable
+
 from utils.async_utils import async_wrap, safe_gather
 from utils.io_utils import ignore_error, async_to_csv
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, time
 from abc import abstractmethod
 import pandas as pd
 from defillama2 import DefiLlama
 
 import requests
 import json
+
+
+class DefiLlamaLiveScrapper(DefiLlama):
+    def __init__(self,
+                 frequency: timedelta = timedelta(seconds=1),
+                 filename: str = 'defillama_live.csv',
+                 pool_filter: Callable = (lambda x: True)):
+        super().__init__()
+        self.logger = logging.getLogger('defillama_live')
+        self.frequency = frequency
+        self.filename = filename
+        # pool filter is a function that takes a row of the pool dataframe and returns a boolean
+        self.pool_filter = pool_filter
+
+    async def snapshot(self):
+        pools = await async_wrap(self.get_pools_yields)()
+        timestamp = datetime.now(tz=None)
+        # block_heights_list = await safe_gather([async_wrap(defillama.get_closest_block)(chain, timestamp.strftime('%Y-%m-%d %H:%M:%S'))
+        #          for chain in pools['chain'].unique()])
+        # block_heights = {chain: result for chain, result in zip(pools['chain'].unique(), block_heights_list)}
+        pools['local_timestamp'] = timestamp
+        #pools['block'] = pools['chain'].apply(lambda x: block_heights[x])
+        return pools[pools.apply(self.pool_filter, axis=1)]
+
+    async def start(self):
+        while True:
+            try:
+                cur_time = datetime.now(tz=None)
+                pools = await self.snapshot()
+            except Exception as e:
+                pools = pd.Series({'local_timestamp': datetime.now(), 'error': str(e)})
+                self.logger.error(e)
+            finally:
+                pools.to_csv(self.filename, mode='a', header=not os.path.isfile(self.filename))
+                await asyncio.sleep((cur_time + self.frequency - datetime.now(tz=None)).total_seconds())
+
+
 class FilteredDefiLlama(DefiLlama):
     '''
     filters protocols and pools from defillama
@@ -156,6 +196,36 @@ class FilteredDefiLlama(DefiLlama):
 
             return {key['pool']: value for key, value in zip(metadata, data)}
 
+
+class DiscoveryDefiLlama(FilteredDefiLlama):
+    def __init__(self,
+                 apy_floor: float = 6,
+                 tvlUsd_floor: float = 3e6,
+                 chains: list[str] = ['Ethereum', 'Abritrum', 'Optimism', 'Polygon', 'Binance Smart Chain']):
+        self.chains = chains
+        self.apy_floor = apy_floor
+        self.tvlUsd_floor = tvlUsd_floor
+        super().__init__()
+
+    def filter_underlyings(self) -> dict:
+        '''
+        we don't use that here
+        '''
+        return []
+    def filter_pools(self, pools) -> pd.DataFrame:
+        # shortlist pools
+        pool_filters = {
+            'chain': lambda x: x in self.chains,
+            'project': lambda x: x in self.protocols['name'].unique(),
+            # 'underlyingTokens': lambda x: all(
+            #     token.lower() in self.shortlisted_tokens.values() for token in x) if isinstance(x,
+            #                                                                                list) else True,
+            'tvlUsd': lambda x: x > self.tvlUsd_floor,
+            'ilRisk': lambda x: not x == 'yes',
+            #    'exposure': lambda x: x in ['single', 'multi'], # ignore
+            'apyMean30d': lambda x: x > self.apy_floor
+        }
+        return pools[pools.apply(lambda x: all(v(x[k]) for k, v in pool_filters.items()), axis=1)]
 
 class DynLst(FilteredDefiLlama):
     '''DynLst is a class that filters pools and
@@ -369,6 +439,8 @@ def compute_moments(apy: dict[str, pd.Series]) -> dict[str, pd.Series]:
     new_apy: dict() = dict()
     for name, df in apy.items():
         # apply apy cutoff date and cap 200%
+        if df is None:
+            continue
         df = df[df.index < datetime.now().replace(tzinfo=timezone.utc)]
         df = df.applymap(lambda x: min(x, 200))
         # hack for data gaps...
@@ -404,12 +476,29 @@ def print_top_pools(new_apy: dict[str,pd.DataFrame]) -> pd.DataFrame:
 if __name__ == '__main__':
     if sys.argv[1] == 'defillama':
         # Create a DefiLlama instance
+        if sys.argv[2] == 'live':
+            filename = 'defillama_{}.csv'.format(datetime.now().strftime('%Y%m%d_%H%M%S'))
+            if os.path.isfile('defillama_live.csv'):
+                shutil.copy('defillama_live.csv', filename)
+
+            pools = pd.concat([DynLst().pools,
+                               DynYieldE().pools,DynYieldB().pools], axis=0)['pool'].tolist()
+            defillama = DefiLlamaLiveScrapper(frequency=timedelta(minutes=5),
+                                              pool_filter=(lambda x: x['pool'] in pools))
+            asyncio.run(defillama.start())
         if sys.argv[2] == 'DynLst':
             defillama = DynLst()
         elif sys.argv[2] == 'DynYieldE':
             defillama = DynYieldE()
         elif sys.argv[2] == 'DynYieldB':
             defillama = DynYieldB()
+        elif sys.argv[2] == 'DiscoveryDefiLlama':
+            if len(sys.argv) == 5:
+                kwargs = {'apy_floor': float(sys.argv[3]),
+                          'tvlUsd_floor': float(sys.argv[4])}
+            else:
+                kwargs = {}
+            defillama = DiscoveryDefiLlama(**kwargs)
 
         # prepare history arguments
         dirname = os.path.join(os.sep, os.getcwd(), 'data', sys.argv[2])
@@ -432,12 +521,14 @@ if __name__ == '__main__':
         coros = [defillama.apy_history(x, **history_kwargs) for _, x in defillama.pools.iterrows()]
         all_history = defillama.all_apy_history(**history_kwargs)
 
-        try:
-            apy = compute_moments(all_history)
-            top_pools = print_top_pools(apy)
-            historical_best_pools = get_historical_best_pools(apy, 10, start, end).resample('d').apply('mean')
-            mean_best_history = historical_best_pools.mean(axis=1)
-            ever_been_top = defillama.pools[defillama.pools['pool'].isin(historical_best_pools.columns)]
-            print('done')
-        except Exception as e:
-            pass
+        apy = compute_moments(all_history)
+        top_pools = print_top_pools(apy)
+        historical_best_pools = get_historical_best_pools(apy, 10, start, end).resample('d').apply('mean')
+        historical_best_pools.index = [t.replace(tzinfo=None) for t in historical_best_pools.index]
+        mean_best_history = historical_best_pools.mean(axis=1)
+        ever_been_top = defillama.pools[defillama.pools['pool'].isin(historical_best_pools.columns)]
+
+        filename = os.path.join(os.sep, os.getcwd(), f'best_ever_{sys.argv[2]}.xlsx')
+        with pd.ExcelWriter(filename, engine='openpyxl', mode='w') as writer:
+            mean_best_history.to_excel(writer, 'mean_best_history')
+            ever_been_top.to_excel(writer, 'ever_been_top')
