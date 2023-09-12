@@ -1,8 +1,11 @@
 import asyncio
 import logging
+import sys
+from datetime import timedelta
 
 import pandas as pd
 import requests
+import yaml
 
 from research.research_engine import build_ResearchEngine
 from strategies.vault_betsizing import YieldStrategy
@@ -13,12 +16,24 @@ build_logging('defillama_live')
 
 class LiveYieldVaultRebalancing:
     # TODO: fill in this dict to translate defillama pool_id to strategy_id
-    strategy_ids = {}
-    def __init__(self, vault_id: str, parameters: dict):
+    strategy_ids = {'42c02674-f7a2-4cb0-be3d-ade268838770': 0}
+
+    def __init__(self,
+                 vault_id: str,
+                 parameters: dict,
+                 immediate_rebalance: bool = False):
         self.vault_id = vault_id
-        self.parameters = parameters
+        self.parameters = parameters # TODO: worth simplifying yaml files for live version
         self.live_feed = None  # TODO: initialize parameters['input_data']['live_feed']
-    def run_live(self):
+        self.immediate_rebalance = immediate_rebalance
+
+    # perpetual function
+    async def periodic_rebalancing(self, rebalance_frequency: timedelta = timedelta(days=1)):
+        while True:
+            await self.rebalance()
+            await asyncio.sleep(rebalance_frequency.total_seconds())
+
+    async def rebalance(self):
         # load data and fit model. quite wasteful since it recomputes ewa at all steps...
         engine = build_ResearchEngine(self.parameters)
         performance = pd.concat(engine.performance, axis=1)
@@ -56,8 +71,8 @@ class LiveYieldVaultRebalancing:
         trades = [async_wrap(self.make_trade)(strategy_index, optimal_weights[i] - rebalancing_strategy.state.weights[i])
                   for i, strategy_index in enumerate(strategy_indices)]
         unwinds = [async_wrap(self.make_trade)(strategy_index, -usdValue) for strategy_index, usdValue in removed_strategies]
-        #TODO: would be better to bundle into a single tx (effectively nets swaps)
-        execution_response = asyncio.run(safe_gather(trades+unwinds))
+        # TODO: would be better to bundle into a single tx (effectively nets swaps)
+        execution_response = await safe_gather(trades+unwinds)
 
         logging.getLogger('defillama_live').info(f'executed trades: {execution_response}')
 
@@ -90,3 +105,12 @@ class LiveYieldVaultRebalancing:
                             headers=header
                             )
 
+
+if __name__ == '__main__':
+    with open(sys.argv[1], 'r') as fp:
+        parameters = yaml.safe_load(fp)
+    # TODO: add command line args for immediate_rebalance and rebalance_frequency
+    yield_vault = LiveYieldVaultRebalancing(vault_id='999',
+                                            parameters=parameters,
+                                            immediate_rebalance=True)
+    asyncio.run(yield_vault.periodic_rebalancing(rebalance_frequency=timedelta(hours=1)))
