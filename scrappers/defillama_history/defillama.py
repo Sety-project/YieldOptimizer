@@ -20,47 +20,49 @@ import json
 
 
 class DefiLlamaLiveScrapper(DefiLlama):
+    '''this takes a defillama snapshot that can be used as market data for vault rebalancing
+    it's a backup if we don't manage to implement contract adapators in time'''
     def __init__(self,
-                 frequency: timedelta = timedelta(seconds=1),
-                 filename: str = 'defillama_live.csv',
+                 filename: str,
                  pool_filter: Callable = (lambda x: True)):
         super().__init__()
-        self.logger = logging.getLogger('defillama_live')
-        self.frequency = frequency
         self.filename = filename
         # pool filter is a function that takes a row of the pool dataframe and returns a boolean
         self.pool_filter = pool_filter
 
     async def snapshot(self):
         pools = await async_wrap(self.get_pools_yields)()
+        pools = pools[pools.apply(self.pool_filter, axis=1)]
         timestamp = datetime.now(tz=None)
         # block_heights_list = await safe_gather([async_wrap(defillama.get_closest_block)(chain, timestamp.strftime('%Y-%m-%d %H:%M:%S'))
         #          for chain in pools['chain'].unique()])
         # block_heights = {chain: result for chain, result in zip(pools['chain'].unique(), block_heights_list)}
         pools['local_timestamp'] = timestamp
         #pools['block'] = pools['chain'].apply(lambda x: block_heights[x])
-        return pools[pools.apply(self.pool_filter, axis=1)]
+        # TODO: Hatim you need to send a kafka
+        pools.to_csv(self.filename, mode='a', header=not os.path.isfile(self.filename))
+        logging.getLogger('defillama_scrapper').info(f'snapshot taken to {self.filename}')
+        return pools
 
-    async def start(self):
+    async def start(self, frequency=timedelta(hours=1)):
+        '''only used for local testing'''
         while True:
             try:
                 cur_time = datetime.now(tz=None)
-                pools = await self.snapshot()
+                await self.snapshot()
             except Exception as e:
-                pools = pd.Series({'local_timestamp': datetime.now(), 'error': str(e)})
                 self.logger.error(e)
             finally:
-                pools.to_csv(self.filename, mode='a', header=not os.path.isfile(self.filename))
-                await asyncio.sleep((cur_time + self.frequency - datetime.now(tz=None)).total_seconds())
+                await asyncio.sleep((cur_time + frequency - datetime.now(tz=None)).total_seconds())
 
 
 class FilteredDefiLlama(DefiLlama):
     '''
     filters protocols and pools from defillama
     '''
-    def __init__(self, *args, **kwargs):
+    def __init__(self):
         self.logger = logging.getLogger('defillama_history')
-        super().__init__(*args, **kwargs)
+        super().__init__()
         protocols = self.get_protocols()
         protocols['name'] = protocols['name'].apply(lambda s: s.lower().replace(' ', '-'))
         self.protocols = self.filter_protocols(protocols)
@@ -72,7 +74,7 @@ class FilteredDefiLlama(DefiLlama):
         '''filter underlyings'''
         raise NotImplementedError
 
-    def filter_protocols(self, protocols, **kwargs) -> pd.DataFrame:
+    def filter_protocols(self, protocols: pd.DataFrame) -> pd.DataFrame:
         '''filter protocols'''
         excluded_categories = ['NFT Lending',
                                'NFT Marketplace']
@@ -101,7 +103,7 @@ class FilteredDefiLlama(DefiLlama):
         return protocols[protocols.apply(lambda x: all(v(x[k]) for k, v in protocol_filters.items()), axis=1)]
 
     @abstractmethod
-    def filter_pools(self, pools, **kwargs) -> pd.DataFrame:
+    def filter_pools(self, pools: pd.DataFrame) -> pd.DataFrame:
         raise NotImplementedError
 
     @ignore_error
@@ -114,7 +116,7 @@ class FilteredDefiLlama(DefiLlama):
 
         apyReward = pool_history['apyReward']
 
-        reward_discount = pd.Series(0, index=apyReward.index)
+        haircut_apy = apy
         if kwargs is not None and 'reward_history' in kwargs:
             if metadata['rewardTokens'] not in [None, []]:
                 token_addrs_n_chains = {rewardToken: metadata['chain'] for rewardToken in metadata['rewardTokens']}
@@ -123,8 +125,6 @@ class FilteredDefiLlama(DefiLlama):
                 reward_discount.reindex(apyReward.index.union(reward_discount.index)).interpolate().loc[apyReward.index]
                 apyReward = apyReward.interpolate(method='linear').fillna(0)
                 haircut_apy = apy - (1 - interpolated_discount) * apyReward
-        else:
-            haircut_apy = apy
 
         # pathetic attempt at IL...
         il = pool_history['il7d'].fillna(0) * 52
@@ -199,9 +199,9 @@ class FilteredDefiLlama(DefiLlama):
 
 class DiscoveryDefiLlama(FilteredDefiLlama):
     def __init__(self,
-                 apy_floor: float = 6,
-                 tvlUsd_floor: float = 3e6,
-                 chains: list[str] = ['Ethereum', 'Abritrum', 'Optimism', 'Polygon', 'Binance Smart Chain']):
+                 apy_floor: float,
+                 tvlUsd_floor: float,
+                 chains: list[str]):
         self.chains = chains
         self.apy_floor = apy_floor
         self.tvlUsd_floor = tvlUsd_floor
@@ -211,8 +211,8 @@ class DiscoveryDefiLlama(FilteredDefiLlama):
         '''
         we don't use that here
         '''
-        return []
-    def filter_pools(self, pools) -> pd.DataFrame:
+        return dict()
+    def filter_pools(self, pools: pd.DataFrame) -> pd.DataFrame:
         # shortlist pools
         pool_filters = {
             'chain': lambda x: x in self.chains,
@@ -231,8 +231,8 @@ class DynLst(FilteredDefiLlama):
     '''DynLst is a class that filters pools and
     stores the historical apy of the pool and the historical apy of the underlying tokens
     '''
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self):
+        super().__init__()
 
         # get underlying history for performance
         shortlisted_tokens_ids = {
@@ -244,7 +244,7 @@ class DynLst(FilteredDefiLlama):
             '0xbe9895146f7af43049ca1c1ae358b0541ea49704': '0f45d730-b279-4629-8e11-ccb5cc3038b4'}
         self.shortlisted_tokens_history = {k: self.get_pool_hist_apy(v)['apy']/100 for k, v in
                                            shortlisted_tokens_ids.items()}
-    def filter_protocols(self, protocols):
+    def filter_protocols(self, protocols: pd.DataFrame):
         return protocols[protocols['name'].isin([
             'lido',
             'frax-ether',
@@ -256,8 +256,8 @@ class DynLst(FilteredDefiLlama):
             'convex-finance',
             'aura'])]
     def filter_underlyings(self):
-        '''filter tokens that are not in the shortlist'''
-        return {'stETH': '0xae7ab96520de3a18e5e111b5eaab095312d7fe84',
+        '''lowercase ! filter tokens that are not in the shortlist'''
+        result = {'stETH': '0xae7ab96520de3a18e5e111b5eaab095312d7fe84',
                 'wstETH': '0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0',
                 'rETH': '0xae78736cd615f374d3085123a210448e74fc6393',
                 'rETH2': '0x20bc832ca081b91433ff6c17f85701b6e92486c5',
@@ -266,7 +266,9 @@ class DynLst(FilteredDefiLlama):
                 'ETH': '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
                 'null': '0x0000000000000000000000000000000000000000',
                 'WETH': '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2'}
-    def filter_pools(self, pools) -> pd.DataFrame:
+
+        return {key: value.lower() for key, value in result.items()}
+    def filter_pools(self, pools: pd.DataFrame) -> pd.DataFrame:
         # shortlist pools
         pool_filters = {
             'chain': lambda x: x in ['Ethereum'],
@@ -341,7 +343,8 @@ class DynYieldE(FilteredDefiLlama):
     # }
 
     def filter_underlyings(self) -> dict:
-        return {'USDC': '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+        '''lower case'''
+        result = {'USDC': '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
                 'USDT': '0xdac17f958d2ee523a2206206994597c13d831ec7',
                 'DAI': '0x6b175474e89094c44da98b954eedeac495271d0f',
                 'BUSD': '0x4fabb145d64652a948d72533023f6e7a623c7c53',
@@ -355,8 +358,9 @@ class DynYieldE(FilteredDefiLlama):
                 'cUSDT': '0xf650c3d88d12db855b8bf7d11be6c55a4e07dcc9',
                 'cDAI': '0x5d3a536e4d6dbd6114cc1ead35777bab948e3643',
                 'sDAI': '0x83f20f44975d03b1b09e64809b757c47f942beea'}
+        return {key: value.lower() for key, value in result.items()}
 
-    def filter_protocols(self, protocols):
+    def filter_protocols(self, protocols: pd.DataFrame):
         return protocols[protocols['name'].isin([
             'compound',
             'morpho-compound'
@@ -373,7 +377,7 @@ class DynYieldE(FilteredDefiLlama):
             'balancer',
             'aura'])]
 
-    def filter_pools(self, pools) -> pd.DataFrame:
+    def filter_pools(self, pools: pd.DataFrame) -> pd.DataFrame:
         # shortlist pools
         pool_filters = {
             'chain': lambda x: x in ['Ethereum'],
@@ -402,19 +406,20 @@ class DynYieldB(FilteredDefiLlama):
     # }
 
     def filter_underlyings(self) -> dict:
-        return {'USDC': '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d',
+        result = {'USDC': '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d',
                 'USDT': '0x55d398326f99059ff775485246999027b3197955',
-                'DAI': '0x1af3f329e8be154074d8769d1ffa4ee058b1dbc3',
-                'BUSD': '0xe9e7cea3dedca5984780bafc599bd69add087d56'}
+                'DAI': '0x1af3f329e8be154074d8769d1ffa4ee058b1dbc3'}
 
-    def filter_protocols(self, protocols):
+        return {key: value.lower() for key, value in result.items()}
+
+    def filter_protocols(self, protocols: pd.DataFrame):
         return protocols[protocols['name'].isin(['stargate',
                                                  'venus',
                                                  'pancakeswap-amm-v3',
                                                  'wing-finance',
                                                  'thena-v1',
                                                  'pancakeswap-amm'])]
-    def filter_pools(self, pools) -> pd.DataFrame:
+    def filter_pools(self, pools: pd.DataFrame) -> pd.DataFrame:
         # shortlist pools
         pool_filters = {
             'chain': lambda x: x in ['BSC'],
@@ -430,13 +435,47 @@ class DynYieldB(FilteredDefiLlama):
         return pools[pools.apply(lambda x: all(v(x[k]) for k, v in pool_filters.items()), axis=1)]
 
 
-'''
-main code
-'''
+class DynYieldBTCE(FilteredDefiLlama):
+    '''DynLst is a class that filters pools and
+    stores the historical apy of the pool and the historical apy of the underlying tokens
+    '''
+    # shortlisted_tokens_tier2 = {
+    #     'MIM': '0x99d8a9c45b2eca8864373a26d1459e3dff1e17f3',
+    #     'GHO': '0x40d16fc0246ad3160ccc09b8d0d3a2cd28ae6c2f',
+    #     'sUSD': '0x57ab1ec28d129707052df4df418d58a2d46d5f51',
+    #     'eUSD': '0xa0d69e286b938e21cbf7e51d71f6a4c8918f482f',
+    #     'crvUSD': '0x8092ac8f4fe9e147098632482598f5855b25ee2f',
+    # 'BLUSD': '0xb9d7dddca9a4ac480991865efef82e01273f79c3',
+    # 'FRAXBP': '0x3175df0976dfa876431c2e9ee6bc45b65d3473cc',
+    # '3CRV': '0x6c3f90f043a72fa612cbac8115ee7e52bde6e490',
+    # ,
+    # }
+
+    def filter_underlyings(self) -> dict:
+        result = {'WBTC': '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599'}
+        return {key: value.lower() for key, value in result.items()}
+
+    def filter_protocols(self, protocols: pd.DataFrame):
+        return protocols
+
+    def filter_pools(self, pools: pd.DataFrame) -> pd.DataFrame:
+        # shortlist pools
+        pool_filters = {
+            'chain': lambda x: x in ['Ethereum'],
+            'project': lambda x: x in self.protocols['name'].unique(),
+            'underlyingTokens': lambda x: all(
+                token.lower() in self.shortlisted_tokens.values() for token in x) if isinstance(x,
+                                                                                           list) else False,
+            'tvlUsd': lambda x: x > 3e6,
+            #    'ilRisk': lambda x: not x == 'yes',
+            #    'exposure': lambda x: x in ['single', 'multi'], # ignore
+            #    'apyMean30d': lambda x: x>4
+        }
+        return pools[pools.apply(lambda x: all(v(x[k]) for k, v in pool_filters.items()), axis=1)]
 
 
 def compute_moments(apy: dict[str, pd.Series]) -> dict[str, pd.Series]:
-    new_apy: dict() = dict()
+    new_apy: dict = dict()
     for name, df in apy.items():
         # apply apy cutoff date and cap 200%
         if df is None:
@@ -460,14 +499,14 @@ def get_historical_best_pools(apy: dict[str, pd.Series], max_rank: int, start: d
     best_only = df[df.rank(axis=1, ascending=False)<max_rank]
     return best_only.dropna(how='all', axis=1)
 
-def print_top_pools(new_apy: dict[str,pd.DataFrame]) -> pd.DataFrame:
+def print_top_pools(new_apy: dict[str,pd.DataFrame], filename: str='defillama_hist.xlsx') -> pd.DataFrame:
     # compute top pools
     verbose_index = defillama.pools[['project', 'symbol', 'pool']].set_index('pool')
     top_pools = pd.DataFrame({tuple([key]+verbose_index.loc[key].to_list()): value.iloc[-1] for key, value in new_apy.items()})
     top_pools = top_pools.T.sort_values(by='haircut_apy',ascending=False)
     # save to excel
     try:
-        with pd.ExcelWriter('defillama_hist.xlsx', engine='openpyxl', mode='w') as writer:
+        with pd.ExcelWriter(filename, engine='openpyxl', mode='w') as writer:
             top_pools.to_excel(writer, datetime.now().strftime(f"{sys.argv[2]} %d %m %Y %H_%M_%S"))
     except PermissionError:
         print('Please close the excel file')
@@ -476,22 +515,25 @@ def print_top_pools(new_apy: dict[str,pd.DataFrame]) -> pd.DataFrame:
 if __name__ == '__main__':
     if sys.argv[1] == 'defillama':
         # Create a DefiLlama instance
-        if sys.argv[2] == 'live':
-            filename = 'defillama_{}.csv'.format(datetime.now().strftime('%Y%m%d_%H%M%S'))
-            if os.path.isfile('defillama_live.csv'):
-                shutil.copy('defillama_live.csv', filename)
-
+        if sys.argv[2] in ['snapshot', 'continuous']:
             pools = pd.concat([DynLst().pools,
                                DynYieldE().pools,DynYieldB().pools], axis=0)['pool'].tolist()
-            defillama = DefiLlamaLiveScrapper(frequency=timedelta(minutes=5),
-                                              pool_filter=(lambda x: x['pool'] in pools))
-            asyncio.run(defillama.start())
-        if sys.argv[2] == 'DynLst':
-            defillama = DynLst()
-        elif sys.argv[2] == 'DynYieldE':
-            defillama = DynYieldE()
-        elif sys.argv[2] == 'DynYieldB':
-            defillama = DynYieldB()
+            if sys.argv[2] == 'snapshot':
+                filename = os.path.join(os.sep, os.getcwd(), 'data', 'snapshots',
+                                        'defillama_{}.csv'.format(datetime.now().strftime('%Y%m%d_%H%M%S')))
+                defillama = DefiLlamaLiveScrapper(filename=filename,
+                                                  pool_filter=(lambda x: x['pool'] in pools))
+                asyncio.run(defillama.snapshot())
+                quit()
+            elif sys.argv[2] == 'continuous':
+                filename = os.path.join(os.sep, os.getcwd(), 'data',
+                                        'defillama_live.csv')
+                defillama = DefiLlamaLiveScrapper(filename=filename,
+                                                  pool_filter=(lambda x: x['pool'] in pools))
+                asyncio.run(defillama.start(frequency=timedelta(hours=1)))
+            else:
+                raise NotImplementedError
+
         elif sys.argv[2] == 'DiscoveryDefiLlama':
             if len(sys.argv) == 5:
                 kwargs = {'apy_floor': float(sys.argv[3]),
@@ -499,6 +541,12 @@ if __name__ == '__main__':
             else:
                 kwargs = {}
             defillama = DiscoveryDefiLlama(**kwargs)
+        else:
+            if sys.argv[2] in globals():
+                defillama = globals()[sys.argv[2]]()
+            else:
+                raise ValueError
+
 
         # prepare history arguments
         dirname = os.path.join(os.sep, os.getcwd(), 'data', sys.argv[2])
