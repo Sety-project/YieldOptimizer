@@ -3,8 +3,6 @@ input_data:
   dirpath:
   - singularity
   - midfreq
-  - scrappers
-  - defillama_history
   - data
   - DynLst
   selected_instruments: # this comes from top n ever
@@ -43,16 +41,16 @@ label_map:
     horizons: # only first is used for now
     - 28
 strategy:
-  cost: 0.001 # 1e-4 is a bp
+  cost: 0.0005 # 1e-4 is a bp
   gas: false # in $
-  base_buffer: 0.15 # relative to wealth
-  concentration_limit: 0.7
+  base_buffer: 0.1 # relative to wealth
+  concentration_limit: 0.4
   initial_wealth: 1000000
   solver_params:
     solver: "ECOS"
     verbose: false
     warm_start: false
-    max_iters: 100
+    max_iters: 1000
     abstol: 0.01
     reltol: 0.01
     feastol: 0.01

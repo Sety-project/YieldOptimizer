@@ -18,7 +18,7 @@ from utils.api_utils import extract_args_kwargs
 
 if __name__ == "__main__":
     args, kwargs = extract_args_kwargs(sys.argv)
-    if args[0] == 'vault':
+    if args[0] in ['backtest', 'grid']:
         # load parameters from yaml
         with open(args[1], 'r') as fp:
             parameters = yaml.safe_load(fp)
@@ -34,24 +34,16 @@ if __name__ == "__main__":
                           "assumed_holding_days": [3, 8, 13, 18, 23, 28, 32, 9999],
                           "base_buffer": [0.15],
                           "concentration_limit": [0.4,
-                                                  0.7, 1.0]}
-
-        # parameter_grid = {"cap": [0.2],
-        #                   "halflife": ["30d"],
-        #                   "cost": [0.0005],
-        #                   "gaz": [False],
-        #                   "assumed_holding_days": [9999],
-        #                   "base_buffer": [0.15],
-        #                   "concentration_limit": [1.0]}
-
+                                                  0.7, 1.0]} if args[1] == 'grid' else dict()
         result = VaultBacktestEngine.run_grid(parameter_grid, parameters)
 
-        try:
-            result.to_csv(
-                os.path.join(os.sep, dirname, 'grid.csv'))
-        except Exception as e:
-            result.to_csv(
-                os.path.join(os.sep, dirname, 'grid2.csv'))
+        if args[1] == 'grid':
+            try:
+                result.to_csv(
+                    os.path.join(os.sep, dirname, 'grid.csv'))
+            except Exception as e:
+                result.to_csv(
+                    os.path.join(os.sep, dirname, 'grid2.csv'))
 
     elif args[0] == 'cta':
         # load parameters
@@ -82,7 +74,7 @@ if __name__ == "__main__":
             engine = build_ResearchEngine(parameters)
 
         # backtest
-        delta_strategy = SingleAssetStrategy(parameters['strategy'], engine)
+        delta_strategy = SingleAssetStrategy(parameters['strategy'])
         backtest = BacktestEngine(parameters['backtest'], delta_strategy)
         result = backtest.backtest_all(engine)
         result.to_csv(os.path.join(os.sep, outputdir, 'backtest_trajectories.csv'))

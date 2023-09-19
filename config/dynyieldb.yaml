@@ -3,21 +3,16 @@ input_data:
   dirpath:
   - singularity
   - midfreq
-  - scrappers
-  - defillama_history
   - data
   - DynYieldB
   selected_instruments: # this comes from top n ever
-  - "0e66dcfe-c01e-4c3b-81f9-99e0a6ab0903" # pancakeswap-amm-v3_USDC-BUSD
-  - "18abc39e-152c-46ce-933d-b7db5609a78a" # thena-v1_USDT-BUSD
   - "282baaa9-11ef-4e72-8ade-efe0c43c07cc" # pancakeswap-amm-v3_USDT-USDC
-  - "72a0cd12-822f-4b71-a063-9887fbfff463" # stargate_BUSD
   - "89eba1e5-1b1b-47b6-958b-38138a04c244" # venus_USDC
-  - "9f0f4cbd-5a26-4eb8-b720-3691b42b0e56" # pancakeswap-amm-v3_USDT-BUSD
+  - "8e1300db-21a5-4a27-bf3f-5788236df4eb" # radiant-v2_USDT
+  - "92927cf2-f501-448c-8ed9-fb41b19e4efc" # radiant-v2_USDC
   - "9f3a6015-5045-4471-ba65-ad3dc7c38269" # venus_USDT
   - "a2e7bb87-b339-44d9-91d7-87a04552afe9" # stargate_USDT
   - "b2e9d5fe-19ca-456b-8cd5-c296d635136f" # pancakeswap-amm-v3_USDT-USDC
-  - "b6fa8f40-7e6b-414e-850d-807750249031" # pancakeswap-amm_USDT-BUSD
   start_date: '2022-09-15T00:00:00'
 run_parameters:
   normalize: false
@@ -39,16 +34,16 @@ label_map:
     horizons: # only first is used for now
       - 28
 strategy:
-  cost: 0.001 # 1e-4 is a bp
+  cost: 0.0005 # 1e-4 is a bp
   gas: false # in $
-  base_buffer: 0.15 # relative to wealth
+  base_buffer: 0.1 # relative to wealth
   concentration_limit: 0.7
   initial_wealth: 1000000
   solver_params:
     solver: "ECOS"
     verbose: false
     warm_start: false
-    max_iters: 100
+    max_iters: 1000
     abstol: 0.01
     reltol: 0.01
     feastol: 0.01
