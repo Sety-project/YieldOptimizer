@@ -418,7 +418,8 @@ class DynYieldB(FilteredDefiLlama):
                                                  'pancakeswap-amm-v3',
                                                  'wing-finance',
                                                  'thena-v1',
-                                                 'pancakeswap-amm'])]
+                                                 'pancakeswap-amm',
+                                                 'radiant-v2'])]
     def filter_pools(self, pools: pd.DataFrame) -> pd.DataFrame:
         # shortlist pools
         pool_filters = {
@@ -530,7 +531,7 @@ if __name__ == '__main__':
                                         'defillama_live.csv')
                 defillama = DefiLlamaLiveScrapper(filename=filename,
                                                   pool_filter=(lambda x: x['pool'] in pools))
-                asyncio.run(defillama.start(frequency=timedelta(hours=1)))
+                asyncio.run(defillama.start(frequency=timedelta(minutes=5)))
             else:
                 raise NotImplementedError
 
