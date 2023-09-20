@@ -128,6 +128,6 @@ class GroupTimeSeriesSplit(_BaseKFold):
 
 def entropy(weights: pd.DataFrame):
     rescaled = weights.div(weights.sum(axis=1), axis=0)
-    entrop = rescaled.apply(lambda x: -np.log(x) * x).sum(axis=1)
+    entrop = rescaled.apply(lambda x: -np.log(np.clip(x, a_min=1e-18, a_max=1.0)) * x).sum(axis=1)
     normalized = entrop / np.log(len(weights.columns))
     return normalized
