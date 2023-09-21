@@ -376,9 +376,7 @@ class BinanceExtremeResearchEngine(ResearchEngine):
 
 
     @staticmethod
-    def read_data(dirpath,
-                  start_date,
-                  selected_instruments: list[Instrument]) -> FileData:
+    def read_data(dirpath, selected_instruments: list[Instrument], start_date) -> FileData:
         file_data: FileData = FileData(dict())
         start_date = dateutil.parser.isoparse(start_date)
         dirname = os.path.join(os.sep, Path.home(), *dirpath)
@@ -565,10 +563,13 @@ class DefillamaResearchEngine(ResearchEngine):
     execution_lag = 0
 
     @staticmethod
-    def read_data(dirpath, start_date, selected_instruments: list[Instrument]) -> FileData:
+    def read_data(dirpath, selected_instruments: list[Instrument], start_date) -> FileData:
         file_data: FileData = FileData(dict())
         start_date = dateutil.parser.isoparse(start_date).replace(tzinfo=timezone.utc)
-        dirname = os.path.join(os.sep, Path.home(), *dirpath)
+        # Made path relative to project root directory instead of absolute one.
+        dirname = os.path.join(os.sep, Path.cwd(), *dirpath)
+        # dirname = os.path.join(os.sep, Path.home(), *dirpath)
+
         for filename in os.listdir(dirname):
             filesplit = filename.split('.csv')
             instrument: Instrument = Instrument(filesplit[0])
@@ -650,7 +651,10 @@ def build_ResearchEngine(input_parameters) -> ResearchEngine:
     elif research_name == "binance_extreme":
         '''binance_extreme'''
         result = BinanceExtremeResearchEngine(**parameters)
-    file_data = result.read_data(**parameters['input_data'])
+    else:
+        raise ValueError(f"Invalid 'research_name' value specified: {research_name}")
+
+    file_data = result.read_data(**{**parameters['input_data'], 'start_date': parameters['backtest']['start_date']})
 
     # record performance for use in backtest
     for instrument in file_data:

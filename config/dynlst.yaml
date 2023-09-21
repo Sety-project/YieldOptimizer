@@ -1,8 +1,10 @@
 input_data:
   ResearchName: defillama
-  dirpath:
-  - singularity
-  - midfreq
+  dirpath:  # it's now relative to project's root directory
+#  - singularity
+#  - midfreq
+#  - scrappers
+#  - defillama_history
   - data
   - DynLst
   selected_instruments: # this comes from top n ever

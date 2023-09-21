@@ -8,7 +8,12 @@ import asyncio
 from copy import deepcopy
 from typing import Callable
 
-from utils.async_utils import async_wrap, safe_gather
+try:
+    from utils.async_utils import async_wrap, safe_gather
+except ImportError:
+    sys.path.append(os.getcwd())    # needed when run from project root directory
+    from utils.async_utils import async_wrap, safe_gather
+
 from utils.io_utils import ignore_error, async_to_csv
 from datetime import datetime, timedelta, timezone, time
 from abc import abstractmethod
