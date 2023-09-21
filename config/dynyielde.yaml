@@ -1,8 +1,6 @@
 input_data:
   ResearchName: defillama
   dirpath:
-  - singularity
-  - midfreq
   - data
   - DynYieldE
   selected_instruments: # this comes from top n ever
