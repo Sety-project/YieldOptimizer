@@ -107,20 +107,11 @@ class YieldStrategyTestCase(unittest.TestCase):
 
     # @unittest.skip
     def test_update_wealth(self):
-        weights = np.array([
+        self.strategy.state.weights = np.array([
             1.05735227e+01, 1.05735227e+01, 1.05735227e+01, 2.00964987e+01, 3.99826588e+05, 1.05735227e+01,
             3.99987319e+05, 5.00470465e+04, 1.05735227e+01, 1.05735227e+01, 1.05735227e+01, 1.05735227e+01,
             1.05735227e+01, 1.05735227e+01])
-
         instr = params['input_data']['selected_instruments']
-        perf = pd.Series(data=[np.nan for _ in range(len(instr))], index=instr,
-                         name=datetime(2023, 9, 2))
-
-        # Check for initial initialization when Datetime index is None
-        cost, gas = self.strategy.update_wealth(weights, State(weights=weights, wealth=1000000.0),
-                                                None, perf.fillna(0.))
-        self.assertEqual((cost, gas), (0., 0.))
-        self.assertEqual(self.strategy.state.weights.all(), weights.all())
 
         # Check with non-None index value
         weights = np.full(len(instr), 0.1)

@@ -146,16 +146,11 @@ class YieldStrategy(VaultRebalancingStrategy):
 
         return new_res
 
-    def update_wealth(self, new_weights: np.array, prev_state: State, prev_index: Optional[datetime],
+    def update_wealth(self, new_weights: np.array, prev_state: State, prev_index: datetime,
                       cur_performance: pd.Series) -> tuple[float, float]:
         """
         update wealth from yields, tx cost, and gas
         """
-        # prev_index is None for first iteration. No yield.
-        if prev_index is None:
-            self.state.weights = new_weights
-            return 0., 0.
-
         new_base_weight = self.state.wealth - np.sum(new_weights)
 
         # yields * dt
