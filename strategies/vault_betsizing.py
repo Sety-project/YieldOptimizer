@@ -1,5 +1,6 @@
 import os
 from abc import ABC, abstractmethod
+from typing import Optional
 import logging
 from copy import deepcopy
 import pandas as pd
@@ -52,15 +53,21 @@ class VaultRebalancingStrategy(ABC):
                 self.cost_optimization = np.zeros(N)
         else:
             raise NotImplementedError
+
     @abstractmethod
     def predict(self, index: datetime) -> np.array:
         raise NotImplementedError
+
     @abstractmethod
     def optimal_weights(self):
         raise NotImplementedError
+
     @abstractmethod
-    def update_wealth(self, prev_state: State) -> None:
+    def update_wealth(self, new_weights: np.array, prev_state: State, prev_index: Optional[datetime],
+                      cur_performance: pd.Series) -> tuple[float, float]:
         raise NotImplementedError
+
+
 class YieldStrategy(VaultRebalancingStrategy):
     '''
     convex optimization of yield
@@ -78,7 +85,8 @@ class YieldStrategy(VaultRebalancingStrategy):
         '''
         uses research engine to predict apy at index
         '''
-        model: sklearn.base.BaseEstimator = list(self.research_engine.fitted_model.values())[0]
+        # model: sklearn.base.BaseEstimator = list(self.research_engine.fitted_model.values())[0]
+        model: sklearn.base.BaseEstimator = self.research_engine.get_model(0)
         return model.predict(index)
 
 
@@ -138,14 +146,15 @@ class YieldStrategy(VaultRebalancingStrategy):
 
         return new_res
 
-    def update_wealth(self, new_weights: np.array, prev_state: State, prev_index: datetime, cur_performance: pd.Series) -> tuple([float, float]):
-        '''
+    def update_wealth(self, new_weights: np.array, prev_state: State, prev_index: Optional[datetime],
+                      cur_performance: pd.Series) -> tuple[float, float]:
+        """
         update wealth from yields, tx cost, and gas
-        '''
+        """
         # prev_index is None for first iteration. No yield.
         if prev_index is None:
             self.state.weights = new_weights
-            return
+            return 0., 0.
 
         new_base_weight = self.state.wealth - np.sum(new_weights)
 

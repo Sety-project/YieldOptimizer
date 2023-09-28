@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from datetime import datetime, timedelta, timezone
 from typing import NewType, Union, Iterator, Callable
-from abc import abstractmethod
+from abc import abstractmethod, abstractstaticmethod
 from pathlib import Path
 from utils.io_utils import profile
 import dateutil.parser
@@ -112,6 +112,11 @@ def winning_trade(log_perf: pd.Series,
                      data=trade_outcome)
 
 class ResearchEngine:
+
+    # TODO: Proper value should be set instead of 0.
+    execution_lag = 0                   # added just to fix the bug in compute_labels()
+    data_interval = timedelta(days=1)   # created to fix the bug in ewma_expansion()
+
     def __init__(self, feature_map, label_map, run_parameters, input_data,**paramsNOTUSED):
         self.feature_map = feature_map
         self.label_map = label_map
@@ -128,8 +133,12 @@ class ResearchEngine:
         self.models: list[sklearn.base.BaseEstimator] = []
         self.fitted_model: dict[tuple[RawFeature, FeatureExpansion, str, int], sklearn.base.BaseEstimator] = dict()
 
+    def get_model(self, index=0):
+        return (self.fitted_model.values())[index]
+
+    @staticmethod
     @abstractmethod
-    def read_data(self):
+    def read_data(dirpath, selected_instruments: list[Instrument], start_date) -> FileData:
         raise NotImplementedError
 
     # def linear_unit_test(self, feature_data: pd.DataFrame, target_vol=1.0) -> Iterator[pd.DataFrame]:
@@ -164,9 +173,12 @@ class ResearchEngine:
     #     yield result
 
 # TODO: Class FeatureEngine: transform_features, expand_features, xxx_exansions, compute_labels, build X_Y
-    def transform_features(self,
-                           file_data: FileData,
-                           feature_map: dict[RawFeature, dict]) -> RawData:
+
+#     def transform_features(self,
+#                            file_data: FileData,
+#                            feature_map: dict[RawFeature, dict]) -> RawData:
+    @staticmethod
+    def transform_features(file_data: FileData, feature_map: dict[RawFeature, dict]) -> RawData:
         '''
         transforms file_data (eg log volume)
         '''
@@ -209,6 +221,7 @@ class ResearchEngine:
 
     def as_is(self, data_dict, instrument, raw_feature, result, params) -> None:
         result[(instrument, raw_feature, f'as_is')] = data_dict[(instrument, raw_feature)]
+
     def ewma_expansion(self, data_dict, instrument, raw_feature, result, params) -> None:
         '''add several ewma, volume_weighted if requested'''
         temp: Data = Data(dict())
@@ -238,7 +251,8 @@ class ResearchEngine:
             for window in all_windows:
                 result[(instrument, raw_feature, f'ewma_{window}')] = temp[window]
 
-    def min_expansion(self, data_dict, instrument, raw_feature, result, params) -> None:
+    @staticmethod
+    def min_expansion(data_dict, instrument, raw_feature, result, params) -> None:
         '''
         add several min max, may use volume clock.
         for windows = [t0, t1] returns minmax over [0,t0] and [t0,t1]
@@ -262,7 +276,8 @@ class ResearchEngine:
             temp = data_dict[(instrument, raw_feature)].shift(start).rolling(length).min()
             result[(instrument, raw_feature, f'min_{start}_{window}')] = temp
 
-    def max_expansion(self, data_dict, instrument, raw_feature, result, params) -> None:
+    @staticmethod
+    def max_expansion(data_dict, instrument, raw_feature, result, params) -> None:
         '''
         add several min max, may use volume clock.
         for windows = [t0, t1] returns minmax over [0,t0] and [t0,t1]
@@ -554,6 +569,7 @@ class TrivialEwmPredictor(sklearn.base.BaseEstimator):
         #     mean = decayed_X.squeeze().fillna(0.0).values
         #     cov = np.identity(raw_X.shape[1])
         # self.distribution = multivariate_normal(mean=mean, cov=cov, allow_singular=True)
+
 
 class DefillamaResearchEngine(ResearchEngine):
     '''
