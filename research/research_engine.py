@@ -134,7 +134,7 @@ class ResearchEngine:
         self.fitted_model: dict[tuple[RawFeature, FeatureExpansion, str, int], sklearn.base.BaseEstimator] = dict()
 
     def get_model(self, index=0):
-        return (self.fitted_model.values())[index]
+        return list(self.fitted_model.values())[index]
 
     @staticmethod
     @abstractmethod

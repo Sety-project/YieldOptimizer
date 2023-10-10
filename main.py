@@ -30,14 +30,22 @@ if __name__ == "__main__":
         parameter_grid = {"cap": [3, 999],
                           "halflife": ["1s", "3d", "10d", "30d"],
                           "cost": [0.0001, 0.0005, 0.001, 0.005],
-                          "gaz": [False],
+                          "gas": [False],
                           "assumed_holding_days": [3, 8, 13, 18, 23, 28, 32, 9999],
                           "base_buffer": [0.15],
                           "concentration_limit": [0.4,
-                                                  0.7, 1.0]} if args[1] == 'grid' else dict()
+                                                  0.7, 1.0]} if args[0] == 'grid' else dict()
+        parameter_grid = {"cap": [3],
+                          "halflife": ["10d"],
+                          "cost": [0.0005],
+                          "gas": [False, 10, 20, 40],
+                          "assumed_holding_days": [7, 28],
+                          "base_buffer": [0.10],
+                          "concentration_limit": [0.4,
+                                                  0.7, 1.0]} if args[0] == 'grid' else dict()
         result = VaultBacktestEngine.run_grid(parameter_grid, parameters)
 
-        if args[1] == 'grid':
+        if args[0] == 'grid':
             try:
                 result.to_csv(
                     os.path.join(os.sep, dirname, 'grid.csv'))
