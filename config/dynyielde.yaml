@@ -49,7 +49,7 @@ label_map:
       - 28
 strategy:
   cost: 0.0005 # 1e-4 is a bp
-  gas: false # in $
+  gas: 20 # in $
   base_buffer: 0.10 # relative to wealth
   concentration_limit: 0.4
   initial_wealth: 1000000
@@ -62,5 +62,5 @@ strategy:
     reltol: 0.01
     feastol: 0.01
 backtest:
-  start_date: '2022-09-01T00:00:00'
-  end_date: '2023-09-01T00:00:00'
+  start_date: '2022-10-01T00:00:00'
+  end_date: '2023-10-01T00:00:00'
