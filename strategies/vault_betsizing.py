@@ -1,3 +1,4 @@
+import copy
 import os
 from abc import ABC, abstractmethod
 from typing import Optional
@@ -133,7 +134,7 @@ class YieldStrategy(VaultRebalancingStrategy):
         ####### CVXPY version #######
         res = self.solve_cvx_problem(predicted_apys, **self.parameters['solver_params'])
         if hasattr(self, 'gas_reduction_routine'):
-            new_res = self.gas_reduction_routine(predicted_apys, res['x'])
+            new_res = self.state.weights + self.gas_reduction_routine(predicted_apys, res['x']-self.state.weights)
         else:
             new_res = res['x']
 
@@ -141,8 +142,7 @@ class YieldStrategy(VaultRebalancingStrategy):
         base_weight = self.state.wealth - np.sum(new_res)
         if base_weight < self.state.wealth * self.parameters['base_buffer']:
             logger = logging.getLogger('defillama')
-            logger.warning(f"trimming base_weight from {base_weight/self.state.wealth}")
-            new_res *= self.state.wealth * (1.0 - self.parameters['base_buffer']) / np.sum(new_res)
+            logger.warning("base_weight {} < {}".format(base_weight/self.state.wealth, self.parameters['base_buffer']))
 
         return new_res
 
@@ -254,93 +254,39 @@ class YieldStrategy(VaultRebalancingStrategy):
 #         if 'verbose' in self.parameters and self.parameters['verbose']:
 #             callbackF(res['x'], details=None, print_with_flag=res['message'])
 #         return res
-#
-#     def gas_reduction_routine(self, predicted_apys, candidate_weights: np.array):
-#         if not self.parameters['gas']:
-#             return candidate_weights
-#         '''
-#         we will keep big increases and remove small increases -> lower overall weight
-#         to keep overall weight constant:
-#         order decreases and remove smallest decreases until they balance the small increases removed
-#         doesnt work the very first step but ... who cares
-#         '''
-#         expected_yield_chg = predicted_apys * (candidate_weights - self.state.weights)
-#         expected_dollar_chg = expected_yield_chg * self.research_engine.label_map['haircut_apy']['horizons'][0] / 365
-#
-#         big_increases_idx = [i for i, gain in enumerate(expected_dollar_chg)
-#                              if gain > 2 * self.parameters['gas']]
-#         small_increases_idx = [i for i, gain in enumerate(expected_dollar_chg)
-#                                if 0 <= gain <= 2 * self.parameters['gas']]
-#         mapp =dict()
-#         if len(small_increases_idx) > 0:
-#             budget = sum([candidate_weights[i] for i in small_increases_idx])
-#             decreases_idx = [i for i, gain in enumerate(expected_dollar_chg) if gain < 0]
-#             if budget + sum([candidate_weights[i] for i in decreases_idx]) > 0:
-#                 # overbudget: consume all negative and compensate on biggest gainer
-#                 for i in decreases_idx:
-#                     mapp[i] = 0
-#                 mapp[big_increases_idx[0]] = candidate_weights[big_increases_idx[0]] - budget
-#             else:
-#                 sorted_decreases_idx = sorted(decreases_idx,
-#                                               key=lambda i: expected_dollar_chg[i],
-#                                               reverse=True)
-#                 small_decrease_idx = []
-#                 i = 0
-#                 for idx in sorted_decreases_idx:
-#                     i += 1 # used in the stub adjustment below
-#                     small_decrease_idx.append(idx)
-#                     budget -= candidate_weights[idx]
-#                     if budget < 0:
-#                         decrease_stub = idx
-#             # # stub adjustment: we remove a bit too much so add a stub
-#             # if i < len(sorted_decreases_idx):
-#             #     decrease_stub = sorted_decreases_idx[i]
-#             # else:
-#             #     while budget - candidate_weights[i] > 0:
-#             #         small_increases_idx.append(decrease_stub) # it s not an increase but it does go to 0
-#             #         budget -= candidate_weights[decrease_stub]
-#             #         i += 1
-#             #         if i < len(sorted_decreases_idx):
-#             #             decrease_stub = sorted_decreases_idx[i]
-#             #         else:
-#             #             new_res[big_increases_idx[0]] -= budget
-#         new_res = np.zeros(len(candidate_weights))
-#         for i in range(len(candidate_weights)):
-#             if i in big_increases_idx:
-#                 new_res[i] = candidate_weights[i]
-#             elif i in small_increases_idx:
-#                 new_res[i] = self.state.weights[i]
-#             elif i in small_decrease_idx:
-#                 new_res[i] = 0
-#             elif i == decrease_stub:
-#                 new_res[i] = candidate_weights[i] - budget
-#             elif i in decreases_idx:
-#                 new_res[i] = candidate_weights[i]
-#             else:
-#                 assert False, "should not happen"
-#
-#         assert abs(np.sum(new_res) - np.sum(candidate_weights)) < 1e-3, f"sum invariant violated {np.sum(new_res)} from {np.sum(candidate_weights)}"
-#         return new_res
-#
-#     def gas_reducing_attempt(self, N, expected_dollar_chg, new_res, res):
-#         #### algo to reduce nb tx after optimization, while keeping sum(weights) invariant
-#         # order expected_dollar_chg by descending expected_dollar_chg
-#         ordering_by_chg = sorted(range(N), key=lambda i: expected_dollar_chg[i], reverse=True)
-#         cumulative_reductions = 0
-#         for i in ordering_by_chg:
-#             # cut small deposits
-#             if 0 < expected_dollar_chg[i] < 2 * self.parameters['gas']:
-#                 new_res[i] = 0
-#                 cumulative_reductions += res['x'][i]
-#             elif expected_dollar_chg[i] < 0:
-#                 new_res[i] = 0
-#                 # cut small withdrawals until sum(weight) invariant
-#                 if cumulative_reductions > res['x'][i]:
-#                     new_res[i] = 0
-#                     cumulative_reductions -= res['x'][i]
-#                 else:
-#                     new_res[i] = res['x'][i] - cumulative_reductions
-#                     break
+
+    def gas_reduction_routine(self, predicted_APY, weights_chg, **kwargs):
+        #### algo to reduce nb tx after optimization, while keeping sum(weights) invariant
+        # order expected_dollar_chg by descending expected_dollar_chg
+        assert (predicted_APY >= 0).all(), "gas_reduction_routine assumes positive APY"
+
+        new_chg = copy.deepcopy(weights_chg)
+        expected_dollar_chg = predicted_APY * weights_chg * self.research_engine.label_map['apy']['horizons'][0] / 365
+        ordering_by_chg = sorted(range(len(expected_dollar_chg)), key=lambda i: expected_dollar_chg[i], reverse=True)
+        chg_of_chg = 0
+        for i in ordering_by_chg:
+            # cut small deposits. This will run first as we order by descending expected_dollar_chg
+            if 0 <= expected_dollar_chg[i] < 2 * self.parameters['gas']:
+                new_chg[i] = 0
+                chg_of_chg += weights_chg[i]
+            elif expected_dollar_chg[i] < 0:
+                # cut small withdrawals until chg_of_chg is consumed
+                if chg_of_chg >= -weights_chg[i]:
+                    # if there is still some chg_of_chg to consume, consume it
+                    new_chg[i] = 0
+                    chg_of_chg += weights_chg[i]
+                else:
+                    # when we run, consume the stub and break
+                    new_chg[i] = weights_chg[i] + chg_of_chg
+                    chg_of_chg = 0
+                    break
+            # note that chg_of_chg may not be exhausted. fine.
+
+        logger = logging.getLogger('defillama')
+        logger.info('{}tx, reduced from {}'.format(
+            sum(abs(n) > 1e-6 for n in new_chg),
+            sum(abs(n) > 1e-6 for n in weights_chg)))
+        return new_chg
 #
 # class TransactionCost:
 #     '''
