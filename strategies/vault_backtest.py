@@ -1,3 +1,4 @@
+import logging
 import os
 from datetime import timedelta
 import numpy as np
@@ -43,27 +44,32 @@ class VaultBacktestEngine:
             new_entry = backtest.record_result(index, predicted_apys, prev_state, rebalancing_strategy, transaction_costs, gas)
             result = pd.concat([result, new_entry.to_frame().T], axis=0)
 
-        return param_override, result, backtest.perf_analysis(result)
+        return param_override, result, VaultBacktestEngine.perf_analysis(result)
 
     @staticmethod
     def run_grid(parameter_grid: dict, parameters: dict) -> pd.DataFrame:
         # data
         perf_list: list[pd.Series] = list()
         for cur_params in dict_list_to_combinations(parameter_grid):
-            try:
-                name = pd.Series(cur_params)
-                cur_params, result, perf = VaultBacktestEngine.run(cur_params, parameters)
-
-                # print to file
-                name_to_str = ''.join(['{}_'.format(str(elem)) for elem in name]) + '_backtest.csv'
-                vault_name = parameters['input_data']['dirpath'][-1].lower()
-                result.to_csv(os.path.join(os.sep, os.getcwd(), "logs", vault_name, name_to_str))
-            except Exception as e:
-                name = pd.Series(cur_params)
-                perf = pd.Series(index=['perf', 'tx_cost', 'avg_entropy'], data=[str(e)]*3)
-                debug_params = deepcopy(cur_params)
-                debug_params['verbose'] = True
-                VaultBacktestEngine.run(debug_params, parameters)
+            # skip run if already in directory
+            name = pd.Series(cur_params)
+            name_to_str = ''.join(['{}_'.format(str(elem)) for elem in name]) + '_backtest.csv'
+            vault_name = parameters['input_data']['dirpath'][-1].lower()
+            filename = os.path.join(os.sep, os.getcwd(), "logs", vault_name, name_to_str)
+            if os.path.isfile(filename):
+                logging.getLogger('defillama').warning(f'{filename} already run')
+                result = pd.read_csv(filename, index_col=0, header=[0, 1], parse_dates=True)
+                perf = VaultBacktestEngine.perf_analysis(result)
+            else:
+                try:
+                    cur_params, result, perf = VaultBacktestEngine.run(cur_params, parameters)
+                    result.to_csv(os.path.join(filename))
+                except Exception as e:
+                    name = pd.Series(cur_params)
+                    perf = pd.Series(index=['perf', 'tx_cost', 'avg_entropy'], data=[str(e)]*3)
+                    debug_params = deepcopy(cur_params)
+                    debug_params['verbose'] = True
+                    VaultBacktestEngine.run(debug_params, parameters)
 
             perf_list.append(pd.concat([name, perf]))
 
@@ -107,7 +113,8 @@ class VaultBacktestEngine:
         new_entry.name = index
         return new_entry
 
-    def perf_analysis(self, df: pd.DataFrame) -> pd.DataFrame:
+    @staticmethod
+    def perf_analysis(df: pd.DataFrame) -> pd.DataFrame:
         '''
         returns performance metrics for a backtest: perf, tx_cost, avg gini
         '''

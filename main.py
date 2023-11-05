@@ -89,7 +89,7 @@ if __name__ == "__main__":
         print(f'backtest')
 
         # analyse perf
-        analysis = backtest.perf_analysis(os.path.join(os.sep, outputdir, 'backtest_trajectories.csv'))
+        analysis = VaultBacktestEngine.perf_analysis(os.path.join(os.sep, outputdir, 'backtest_trajectories.csv'))
         analysis.to_csv(os.path.join(os.sep, outputdir, 'perf_analysis.csv'))
         print(f'analyse perf')
 
