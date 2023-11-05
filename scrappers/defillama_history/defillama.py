@@ -246,7 +246,8 @@ class DynLst(FilteredDefiLlama):
             '0xae78736cd615f374d3085123a210448e74fc6393': 'd4b3c522-6127-4b89-bedf-83641cdcd2eb',
             '0x20bc832ca081b91433ff6c17f85701b6e92486c5': '66958f46-1d06-4f83-9fab-bbec354049d8',
             '0xac3e018457b222d93114458476f3e3416abbe38f': '77020688-e1f9-443c-9388-e51ace15cc32',
-            '0xbe9895146f7af43049ca1c1ae358b0541ea49704': '0f45d730-b279-4629-8e11-ccb5cc3038b4'}
+            '0xbe9895146f7af43049ca1c1ae358b0541ea49704': '0f45d730-b279-4629-8e11-ccb5cc3038b4',
+            '0xf951e335afb289353dc249e82926178eac7ded78': 'ca2acc2d-6246-44aa-ae91-8725b2c62c7c'}
         self.shortlisted_tokens_history = {k: self.get_pool_hist_apy(v)['apy']/100 for k, v in
                                            shortlisted_tokens_ids.items()}
     def filter_protocols(self, protocols: pd.DataFrame):
@@ -259,18 +260,21 @@ class DynLst(FilteredDefiLlama):
             'balancer-v2',
             'curve-finance',
             'convex-finance',
-            'aura'])]
+            'aura',
+            'gyroscope-protocol'])]
     def filter_underlyings(self):
         '''lowercase ! filter tokens that are not in the shortlist'''
         result = {'stETH': '0xae7ab96520de3a18e5e111b5eaab095312d7fe84',
-                'wstETH': '0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0',
-                'rETH': '0xae78736cd615f374d3085123a210448e74fc6393',
-                'rETH2': '0x20bc832ca081b91433ff6c17f85701b6e92486c5',
-                'frxETH': '0x5e8422345238f34275888049021821e8e08caa1f',
-                'sfrxETH': '0xac3e018457b222d93114458476f3e3416abbe38f',
-                'ETH': '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
-                'null': '0x0000000000000000000000000000000000000000',
-                'WETH': '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2'}
+                  'wstETH': '0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0',
+                  'rETH': '0xae78736cd615f374d3085123a210448e74fc6393',
+                  'rETH2': '0x20bc832ca081b91433ff6c17f85701b6e92486c5',
+                  'frxETH': '0x5e8422345238f34275888049021821e8e08caa1f',
+                  'sfrxETH': '0xac3e018457b222d93114458476f3e3416abbe38f',
+                  'swETH': '0xf951e335afb289353dc249e82926178eac7ded78',
+                  'ETH': '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+                  'null': '0x0000000000000000000000000000000000000000',
+                  'WETH': '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2',
+                  'cbETH': '0xbe9895146f7af43049ca1c1ae358b0541ea49704'}
 
         return {key: value.lower() for key, value in result.items()}
     def filter_pools(self, pools: pd.DataFrame) -> pd.DataFrame:
@@ -281,7 +285,7 @@ class DynLst(FilteredDefiLlama):
             'underlyingTokens': lambda x: all(
                 token.lower() in self.shortlisted_tokens.values() for token in x) if isinstance(x,
                                                                                            list) else True,
-            'tvlUsd': lambda x: x > 3e6,
+            'tvlUsd': lambda x: x > 1e6,
             #    'ilRisk': lambda x: not x == 'yes',
             #    'exposure': lambda x: x in ['single', 'multi'], # ignore
             #    'apyMean30d': lambda x: x>4
@@ -335,34 +339,28 @@ class DynYieldE(FilteredDefiLlama):
     '''DynLst is a class that filters pools and
     stores the historical apy of the pool and the historical apy of the underlying tokens
     '''
-    # shortlisted_tokens_tier2 = {
-    #     'MIM': '0x99d8a9c45b2eca8864373a26d1459e3dff1e17f3',
-    #     'GHO': '0x40d16fc0246ad3160ccc09b8d0d3a2cd28ae6c2f',
-    #     'sUSD': '0x57ab1ec28d129707052df4df418d58a2d46d5f51',
-    #     'eUSD': '0xa0d69e286b938e21cbf7e51d71f6a4c8918f482f',
-    #     'crvUSD': '0x8092ac8f4fe9e147098632482598f5855b25ee2f',
-    # 'BLUSD': '0xb9d7dddca9a4ac480991865efef82e01273f79c3',
-    # 'FRAXBP': '0x3175df0976dfa876431c2e9ee6bc45b65d3473cc',
-    # '3CRV': '0x6c3f90f043a72fa612cbac8115ee7e52bde6e490',
-    # ,
-    # }
-
     def filter_underlyings(self) -> dict:
         '''lower case'''
         result = {'USDC': '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
-                'USDT': '0xdac17f958d2ee523a2206206994597c13d831ec7',
-                'DAI': '0x6b175474e89094c44da98b954eedeac495271d0f',
-                'BUSD': '0x4fabb145d64652a948d72533023f6e7a623c7c53',
-                'FRAX': '0x853d955acef822db058eb8505911ed77f175b99e',
-                'LUSD': '0x5f98805a4e8be255a32880fdec7f6728c6568ba0',
-                'MIM': '0x99d8a9c45b2eca8864373a26d1459e3dff1e17f3',
-                'aUSDC': '0xbcca60bb61934080951369a648fb03df4f96263c',
-                'aUSDT': '0x3ed3b47dd13ec9a98b44e6204a523e766b225811',
-                'aDAI': '0x028171bca77440897b824ca71d1c56cac55b68a3',
-                'cUSDC': '0x39aa39c021dfbae8fac545936693ac917d5e7563',
-                'cUSDT': '0xf650c3d88d12db855b8bf7d11be6c55a4e07dcc9',
-                'cDAI': '0x5d3a536e4d6dbd6114cc1ead35777bab948e3643',
-                'sDAI': '0x83f20f44975d03b1b09e64809b757c47f942beea'}
+                  'USDT': '0xdac17f958d2ee523a2206206994597c13d831ec7',
+                  'DAI': '0x6b175474e89094c44da98b954eedeac495271d0f',
+                  'BUSD': '0x4fabb145d64652a948d72533023f6e7a623c7c53',
+                  'FRAX': '0x853d955acef822db058eb8505911ed77f175b99e',
+                  'LUSD': '0x5f98805a4e8be255a32880fdec7f6728c6568ba0',
+                  'MIM': '0x99d8a9c45b2eca8864373a26d1459e3dff1e17f3',
+                  'aUSDC': '0xbcca60bb61934080951369a648fb03df4f96263c',
+                  'aUSDT': '0x3ed3b47dd13ec9a98b44e6204a523e766b225811',
+                  'aDAI': '0x028171bca77440897b824ca71d1c56cac55b68a3',
+                  'cUSDC': '0x39aa39c021dfbae8fac545936693ac917d5e7563',
+                  'cUSDT': '0xf650c3d88d12db855b8bf7d11be6c55a4e07dcc9',
+                  'cDAI': '0x5d3a536e4d6dbd6114cc1ead35777bab948e3643',
+                  'sDAI': '0x83f20f44975d03b1b09e64809b757c47f942beea',
+                  'eUSD': '0xdf3ac4f479375802a821f7b7b46cd7eb5e4262cc',
+                  'crvUSD': '0xf939e0a03fb07f59a73314e73794be0e57ac1b4e',
+                  'sUSD': '0x57ab1ec28d129707052df4df418d58a2d46d5f51',
+                  'FRAXBP': '0x3175df0976dfa876431c2e9ee6bc45b65d3473cc',
+                  'mkUSD': '0x4591dbff62656e7859afe5e45f6f47d3669fbb28',
+                  'R': '0x183015a9ba6ff60230fdeadc3f43b3d788b13e21'}
         return {key: value.lower() for key, value in result.items()}
 
     def filter_protocols(self, protocols: pd.DataFrame):
@@ -390,7 +388,7 @@ class DynYieldE(FilteredDefiLlama):
             'underlyingTokens': lambda x: all(
                 token.lower() in self.shortlisted_tokens.values() for token in x) if isinstance(x,
                                                                                            list) else True,
-            'tvlUsd': lambda x: x > 3e6,
+            'tvlUsd': lambda x: x > 1e6,
             #    'ilRisk': lambda x: not x == 'yes',
             #    'exposure': lambda x: x in ['single', 'multi'], # ignore
             #    'apyMean30d': lambda x: x>4
@@ -541,9 +539,10 @@ if __name__ == '__main__':
                 raise NotImplementedError
 
         elif sys.argv[2] == 'DiscoveryDefiLlama':
-            if len(sys.argv) == 5:
+            if len(sys.argv) >= 6:
                 kwargs = {'apy_floor': float(sys.argv[3]),
-                          'tvlUsd_floor': float(sys.argv[4])}
+                          'tvlUsd_floor': float(sys.argv[4]),
+                          'chains': sys.argv[5:]}
             else:
                 kwargs = {}
             defillama = DiscoveryDefiLlama(**kwargs)
