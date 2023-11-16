@@ -80,6 +80,34 @@ class FilteredDefiLlama(DefiLlama):
         raise NotImplementedError
 
     def filter_protocols(self, protocols: pd.DataFrame) -> pd.DataFrame:
+        return protocols[protocols['name'].isin(['curve-dex',
+                                                 'balancer',
+                                                 'pancakeswap-amm',
+                                                 'venus-isolated-pools',
+                                                 'lido',
+                                                 'aave-v2',
+                                                 'morpho-aavev3',
+                                                 'uniswap-v2',
+                                                 'thena-v1',
+                                                 'morpho-compoundcompound-v3',
+                                                 'morpho-aave',
+                                                 'curve-finance',
+                                                 'convex-finance',
+                                                 'compound',
+                                                 'frax-ether',
+                                                 'aura',
+                                                 'venus-core-pool',
+                                                 'aave-v3',
+                                                 'uniswap-v3',
+                                                 'stargate',
+                                                 'makerdao',
+                                                 'balancer-v2',
+                                                 'rocket-pool',
+                                                 'pancakeswap-amm-v3',
+                                                 'spark'])]
+
+
+    def wide_filter_protocols(self, protocols: pd.DataFrame) -> pd.DataFrame:
         '''filter protocols'''
         excluded_categories = ['NFT Lending',
                                'NFT Marketplace']
@@ -247,21 +275,10 @@ class DynLst(FilteredDefiLlama):
             '0x20bc832ca081b91433ff6c17f85701b6e92486c5': '66958f46-1d06-4f83-9fab-bbec354049d8',
             '0xac3e018457b222d93114458476f3e3416abbe38f': '77020688-e1f9-443c-9388-e51ace15cc32',
             '0xbe9895146f7af43049ca1c1ae358b0541ea49704': '0f45d730-b279-4629-8e11-ccb5cc3038b4',
-            '0xf951e335afb289353dc249e82926178eac7ded78': 'ca2acc2d-6246-44aa-ae91-8725b2c62c7c'}
+            '0xf951e335afb289353dc249e82926178eac7ded78': 'ca2acc2d-6246-44aa-ae91-8725b2c62c7c',
+            '0x856c4efb76c1d1ae02e20ceb03a2a6a08b0b8dc3': '423681e3-4787-40ce-ae43-e9f67c5269b3'}
         self.shortlisted_tokens_history = {k: self.get_pool_hist_apy(v)['apy']/100 for k, v in
                                            shortlisted_tokens_ids.items()}
-    def filter_protocols(self, protocols: pd.DataFrame):
-        return protocols[protocols['name'].isin([
-            'lido',
-            'frax-ether',
-            'rocket-pool',
-            'aave-v3',
-            'morpho-aavev3',
-            'balancer-v2',
-            'curve-finance',
-            'convex-finance',
-            'aura',
-            'gyroscope-protocol'])]
     def filter_underlyings(self):
         '''lowercase ! filter tokens that are not in the shortlist'''
         result = {'stETH': '0xae7ab96520de3a18e5e111b5eaab095312d7fe84',
@@ -274,7 +291,8 @@ class DynLst(FilteredDefiLlama):
                   'ETH': '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
                   'null': '0x0000000000000000000000000000000000000000',
                   'WETH': '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2',
-                  'cbETH': '0xbe9895146f7af43049ca1c1ae358b0541ea49704'}
+                  'cbETH': '0xbe9895146f7af43049ca1c1ae358b0541ea49704',
+                  'oETH': '0x856c4efb76c1d1ae02e20ceb03a2a6a08b0b8dc3'}
 
         return {key: value.lower() for key, value in result.items()}
     def filter_pools(self, pools: pd.DataFrame) -> pd.DataFrame:
@@ -285,7 +303,7 @@ class DynLst(FilteredDefiLlama):
             'underlyingTokens': lambda x: all(
                 token.lower() in self.shortlisted_tokens.values() for token in x) if isinstance(x,
                                                                                            list) else True,
-            'tvlUsd': lambda x: x > 1e6,
+            'tvlUsd': lambda x: x > 1,
             #    'ilRisk': lambda x: not x == 'yes',
             #    'exposure': lambda x: x in ['single', 'multi'], # ignore
             #    'apyMean30d': lambda x: x>4
@@ -358,26 +376,9 @@ class DynYieldE(FilteredDefiLlama):
                   'crvUSD': '0xf939e0a03fb07f59a73314e73794be0e57ac1b4e',
                   'sUSD': '0x57ab1ec28d129707052df4df418d58a2d46d5f51',
                   'FRAXBP': '0x3175df0976dfa876431c2e9ee6bc45b65d3473cc',
-                  'mkUSD': '0x4591dbff62656e7859afe5e45f6f47d3669fbb28',
-                  'R': '0x183015a9ba6ff60230fdeadc3f43b3d788b13e21'}
+                  'mkUSD': '0x4591dbff62656e7859afe5e45f6f47d3669fbb28'}
         return {key: value.lower() for key, value in result.items()}
 
-    def filter_protocols(self, protocols: pd.DataFrame):
-        return protocols[protocols['name'].isin([
-            'compound',
-            'morpho-compound'
-            'compound-v3',
-            'morpho-aave',
-            'convex-finance',
-            'uniswap-v3',
-            'uniswap-v2',
-            'aave-v2',
-            'aave-v3',
-            'curve-dex',
-            'spark',
-            'makerdao',
-            'balancer',
-            'aura'])]
 
     def filter_pools(self, pools: pd.DataFrame) -> pd.DataFrame:
         # shortlist pools
@@ -387,7 +388,7 @@ class DynYieldE(FilteredDefiLlama):
             'underlyingTokens': lambda x: all(
                 token.lower() in self.shortlisted_tokens.values() for token in x) if isinstance(x,
                                                                                            list) else True,
-            'tvlUsd': lambda x: x > 1e6,
+            'tvlUsd': lambda x: x > 1,
             #    'ilRisk': lambda x: not x == 'yes',
             #    'exposure': lambda x: x in ['single', 'multi'], # ignore
             #    'apyMean30d': lambda x: x>4
@@ -414,14 +415,6 @@ class DynYieldB(FilteredDefiLlama):
 
         return {key: value.lower() for key, value in result.items()}
 
-    def filter_protocols(self, protocols: pd.DataFrame):
-        return protocols[protocols['name'].isin(['stargate',
-                                                 'venus',
-                                                 'pancakeswap-amm-v3',
-                                                 'wing-finance',
-                                                 'thena-v1',
-                                                 'pancakeswap-amm',
-                                                 'radiant-v2'])]
     def filter_pools(self, pools: pd.DataFrame) -> pd.DataFrame:
         # shortlist pools
         pool_filters = {
@@ -430,7 +423,7 @@ class DynYieldB(FilteredDefiLlama):
             'underlyingTokens': lambda x: all(
                 token.lower() in self.shortlisted_tokens.values() for token in x) if isinstance(x,
                                                                                            list) else False,
-            'tvlUsd': lambda x: x > 1e6,
+            'tvlUsd': lambda x: x > 1,
             #    'ilRisk': lambda x: not x == 'yes',
             #    'exposure': lambda x: x in ['single', 'multi'], # ignore
             #    'apyMean30d': lambda x: x>4
