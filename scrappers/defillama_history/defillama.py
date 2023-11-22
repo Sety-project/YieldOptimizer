@@ -303,7 +303,7 @@ class DynLst(FilteredDefiLlama):
             'underlyingTokens': lambda x: all(
                 token.lower() in self.shortlisted_tokens.values() for token in x) if isinstance(x,
                                                                                            list) else True,
-            'tvlUsd': lambda x: x > 1,
+            'tvlUsd': lambda x: x > 1e5,
             #    'ilRisk': lambda x: not x == 'yes',
             #    'exposure': lambda x: x in ['single', 'multi'], # ignore
             #    'apyMean30d': lambda x: x>4
@@ -388,7 +388,7 @@ class DynYieldE(FilteredDefiLlama):
             'underlyingTokens': lambda x: all(
                 token.lower() in self.shortlisted_tokens.values() for token in x) if isinstance(x,
                                                                                            list) else True,
-            'tvlUsd': lambda x: x > 1,
+            'tvlUsd': lambda x: x > 1e5,
             #    'ilRisk': lambda x: not x == 'yes',
             #    'exposure': lambda x: x in ['single', 'multi'], # ignore
             #    'apyMean30d': lambda x: x>4
@@ -423,7 +423,7 @@ class DynYieldB(FilteredDefiLlama):
             'underlyingTokens': lambda x: all(
                 token.lower() in self.shortlisted_tokens.values() for token in x) if isinstance(x,
                                                                                            list) else False,
-            'tvlUsd': lambda x: x > 1,
+            'tvlUsd': lambda x: x > 1e5,
             #    'ilRisk': lambda x: not x == 'yes',
             #    'exposure': lambda x: x in ['single', 'multi'], # ignore
             #    'apyMean30d': lambda x: x>4
