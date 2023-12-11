@@ -27,23 +27,15 @@ if __name__ == "__main__":
         if not os.path.isdir(dirname):
             os.makedirs(dirname)
 
-        parameter_grid = {"cap": [3, 999],
-                          "halflife": ["1s", "3d", "10d", "30d"],
-                          "cost": [0.0001, 0.0005, 0.001, 0.005],
-                          "gas": [False],
-                          "assumed_holding_days": [3, 8, 13, 18, 23, 28, 32, 9999],
-                          "base_buffer": [0.15],
-                          "concentration_limit": [0.4,
+        override_grid = {'run_parameters.models.apy.TrivialEwmPredictor.params.cap': [3],
+                          'run_parameters.models.apy.TrivialEwmPredictor.params.halflife': ["10d"],
+                          'strategy.cost': [0.0005],
+                          'strategy.gas': [False, 10, 20, 40],
+                         'strategy.base_buffer': [0.1],
+                          "label_map.apy.horizons": [[7], [28]],
+                          "strategy.concentration_limit": [0.4,
                                                   0.7, 1.0]} if args[0] == 'grid' else dict()
-        parameter_grid = {"cap": [3],
-                          "halflife": ["10d"],
-                          "cost": [0.0005],
-                          "gas": [False, 10, 20, 40],
-                          "assumed_holding_days": [7, 28],
-                          "base_buffer": [0.10],
-                          "concentration_limit": [0.4,
-                                                  0.7, 1.0]} if args[0] == 'grid' else dict()
-        result = VaultBacktestEngine.run_grid(parameter_grid, parameters)
+        result = VaultBacktestEngine.run_grid(override_grid, parameters)
 
         if args[0] == 'grid':
             try:

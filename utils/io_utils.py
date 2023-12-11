@@ -61,23 +61,12 @@ class NpEncoder(json.JSONEncoder):
 
 def modify_target_with_argument(target: dict, argument: dict) -> dict:
     result = deepcopy(target)
-    if "cap" in argument:
-        result["run_parameters"]["models"]["apy"]["TrivialEwmPredictor"]["params"]['cap'] = argument[
-            'cap']
-    if "halflife" in argument:
-        result["run_parameters"]["models"]["apy"]["TrivialEwmPredictor"]["params"]['halflife'] = argument['halflife']
-    if "cost" in argument:
-        result['strategy']['cost'] = argument['cost']
-    if "gas" in argument:
-        result['strategy']['gas'] = argument['gas']
-    if "base_buffer" in argument:
-        result['strategy']['base_buffer'] = argument['base_buffer']
-    if "concentration_limit" in argument:
-        result['strategy']['concentration_limit'] = argument['concentration_limit']
-    if "verbose" in argument:
-        result['strategy']['solver_params']['verbose'] = argument['verbose']
-    if "assumed_holding_days" in argument:
-        result["label_map"]["apy"]["horizons"] = [argument['assumed_holding_days']]
+    for path, value in argument.items():
+        path = path.split('.')
+        cur = result
+        for p in path[:-1]:
+            cur = cur[p]
+        cur[path[-1]] = value
     return result
 
 def dict_list_to_combinations(d: dict) -> list[pd.DataFrame]:
