@@ -185,6 +185,8 @@ class ResearchEngine:
         result: RawData = RawData(dict())
         for instrument, df in file_data.items():
             for raw_feature, params in feature_map.items():
+                if not raw_feature in file_data[instrument]:
+                    continue
                 if 'transform' in params:
                     data = file_data[instrument][raw_feature]
                     if params['transform'] == 'log':
@@ -511,33 +513,44 @@ class BinanceExtremeResearchEngine(ResearchEngine):
 
 
 class TrivialEwmPredictor(sklearn.base.BaseEstimator):
-    def __init__(self, halflife: str, cap: float):
+    def __init__(self, halflife: str, cap: float, horizon: timedelta):
         self.halflife = pd.Timedelta(halflife)
         self.cap = cap
-        self.distribution: dict[datetime, multivariate_normal] = dict()
+        self.horizon = pd.Timedelta(horizon)
+        self.apy: pd.DataFrame = pd.DataFrame()
+        self.tvl: pd.DataFrame = pd.DataFrame()
 
-    def predict(self, index: datetime) -> np.array:
-        return self.distribution[index].mean
+    def predict(self, index: datetime) -> tuple[np.array, np.array]:
+        '''returns APYs and tvls (used to estimate dilution)'''
+        return self.apy.loc[index].values, self.tvl.loc[index].values
 
     def fit(self, raw_X: pd.DataFrame) -> None:
         '''
-        only predicts one time
-        mere gaussian distribution, but we exclude spikes
+        precompute, for speed
         '''
+        apy_X = raw_X.xs(level=['feature', 'window'], key=['apy', 'as_is'], axis=1).ffill().fillna(0.0)
         # select only rows of X that deviate from mean by less than 3 stdev
-        mean = raw_X.ewm(times=raw_X.index, halflife=self.halflife).mean()
-        stdev = raw_X.ewm(times=raw_X.index, halflife=self.halflife).std()
-        X = pd.DataFrame(index=raw_X.index, columns=raw_X.columns)
+        mean = apy_X.ewm(times=apy_X.index, halflife=self.halflife).mean()
+        stdev = apy_X.ewm(times=apy_X.index, halflife=self.halflife).std()
+        X = pd.DataFrame(index=apy_X.index, columns=apy_X.columns)
         for col in X.columns:
-            mask = np.abs(raw_X[col] - mean[col]) <= self.cap * stdev[col]
-            X[col] = np.where(mask, raw_X[col], mean[col])
-        # fillna implies pools that do not yet exist have 0 yield
-        mean = X.ewm(times=X.index, halflife=self.halflife).mean().fillna(0.0)
-        # TODO: implement cov
-        cov = np.identity(X.shape[1])
+            mask = np.abs(apy_X[col] - mean[col]) <= self.cap * stdev[col]
+            X[col] = np.where(mask, apy_X[col], mean[col])
 
-        self.distribution = {index: multivariate_normal(mean=mean.loc[index], cov=cov, allow_singular=True)
-                             for index in mean.index}
+        # fillna implies pools that do not yet exist have 0 yield / tvl
+        self.apy = X.ewm(times=X.index, halflife=self.halflife).mean().fillna(0.0)
+
+        # add apy from mean reversion
+        for instrument, subframe in raw_X.groupby(level='instrument', axis=1):
+            depeg = dict()
+            for col, price in subframe.groupby(level='feature', axis=1):
+                if 'underlying' in col:
+                    depeg[col] = (price - price.ewm(times=price.index, halflife=self.halflife).mean()).ffill().fillna(0.0)
+            if depeg != dict():
+                self.apy[instrument] -= pd.concat(depeg, axis=1).mean(axis=1).fillna(0.0) / self.horizon.total_seconds() * 365.25 * 24 * 60 * 60
+                self.apy[instrument] = self.apy[instrument].clip(lower=0.0)
+        self.tvl = raw_X.xs(level=['feature', 'window'], key=['tvl', 'as_is'], axis=1).ffill().fillna(0.0)
+
         return
         #
         # decay = pd.Series(index=X.index, data=np.exp(

@@ -33,13 +33,13 @@ class VaultBacktestEngine:
         for index, cur_performance in backtest.performance.iterrows():
             prev_state = deepcopy(rebalancing_strategy.state)
 
-            predicted_apys = rebalancing_strategy.predict(index)
-            optimal_weights = rebalancing_strategy.optimal_weights(predicted_apys)
-            transaction_costs, gas = rebalancing_strategy.update_wealth(optimal_weights, prev_state, prev_index, cur_performance.fillna(0.0))
+            predicted_apys, tvl = rebalancing_strategy.predict(index)
+            optimal_weights = rebalancing_strategy.optimal_weights(predicted_apys, tvl)
+            step_results = rebalancing_strategy.update_wealth(optimal_weights, prev_state, prev_index, cur_performance.fillna(0.0))
 
             prev_index = deepcopy(index)
 
-            new_entry = backtest.record_result(index, predicted_apys, prev_state, rebalancing_strategy, transaction_costs, gas)
+            new_entry = backtest.record_result(index, predicted_apys, prev_state, rebalancing_strategy, step_results)
             result = pd.concat([result, new_entry.to_frame().T], axis=0)
 
         return result
@@ -68,7 +68,7 @@ class VaultBacktestEngine:
 
         return pd.DataFrame(perf_list)
 
-    def record_result(self, index, predicted_apys, prev_state, rebalancing_strategy, transaction_costs, gas) -> pd.Series:
+    def record_result(self, index, predicted_apys, prev_state, rebalancing_strategy, step_results) -> pd.Series:
         weights = {f'weight_{i}': weight
                    for i, weight in enumerate(prev_state.weights)}
         weights = pd.Series(weights)
@@ -86,6 +86,7 @@ class VaultBacktestEngine:
         temp['apy'] = apy.loc[index].values
         temp['pred_apy'] = predicted_apys
         temp['full_apy'] = full_apy.loc[index].values
+        temp['dilutor'] = step_results['dilutor']
 
         temp = pd.DataFrame(temp).fillna(0.0)
 
@@ -95,13 +96,13 @@ class VaultBacktestEngine:
 
         predict_horizon = rebalancing_strategy.research_engine.label_map['apy']['horizons'][0]
         pnl = pd.DataFrame({'pnl':
-        {'wealth': prev_state.wealth,
-         'tx_cost': transaction_costs,
-         'gas': gas,
-         'tracking_error': np.dot(prev_state.weights,
-                                  apy.rolling(predict_horizon).mean().shift(
-                                      -predict_horizon).loc[index] - predicted_apys)
-                           / max(1e-8, sum(prev_state.weights))}})
+                                {'wealth': prev_state.wealth,
+                                 'gas': step_results['gas'],
+                                 'tx_cost': step_results['transaction_costs'],
+                                 'tracking_error': np.dot(prev_state.weights,
+                                                          apy.rolling(predict_horizon).mean().shift(
+                                                              -predict_horizon).loc[index] - predicted_apys)
+                                                   / max(1e-8, sum(prev_state.weights))}})
         new_entry: pd.Series = pd.concat([temp.unstack(), pnl.unstack()], axis=0)
         new_entry.name = index
         return new_entry

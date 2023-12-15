@@ -82,20 +82,21 @@ class YieldStrategy(VaultRebalancingStrategy):
         self.progress_display = pd.DataFrame()
         self.current_time = datetime.now()
 
-    def predict(self, index: datetime) -> np.array:
+    def predict(self, index: datetime) -> tuple[np.array, np.array]:
         '''
-        uses research engine to predict apy at index
+        uses research engine to predict apy at index. also returns tvl for dilution.
         '''
         # model: sklearn.base.BaseEstimator = list(self.research_engine.fitted_model.values())[0]
         model: sklearn.base.BaseEstimator = self.research_engine.get_model(0)
         return model.predict(index)
 
 
-    def solve_cvx_problem(self, predicted_apys, **kwargs):
+    def solve_cvx_problem(self, predicted_apys, tvl, **kwargs):
         # Define the variables and parameters
         N = len(predicted_apys)
         x = cp.Variable(shape=N, nonneg=True, value=deepcopy(self.state.weights/self.state.wealth))
-        a = cp.Parameter(shape=N, nonneg=True, value=predicted_apys)
+        a = cp.Parameter(shape=N, nonneg=True, value=predicted_apys.clip(min=0.0))
+        a_over_tvl = cp.Parameter(shape=(N, N), PSD=True, value=np.diag(predicted_apys/tvl.clip(min=1e-18)*self.state.wealth))
         x0 = cp.Parameter(shape=N, nonneg=True, value=self.state.weights/self.state.wealth)
         # cost_optimization plays in the objective, BUT NOT in update_wealth
         cost = cp.Parameter(shape=N, nonneg=True, value=self.cost_optimization)
@@ -103,7 +104,8 @@ class YieldStrategy(VaultRebalancingStrategy):
         max_sumx = cp.Parameter(value=(1.0 - self.parameters['base_buffer']))
 
         # Define the DCP expression. TODO:Trick y to make DPP compliant using y ?
-        objective = cp.Minimize(-a @ x + cost @ cp.abs(x - x0))
+        # assume x << tvl
+        objective = cp.Minimize(-a @ x + cost @ cp.abs(x - x0) + cp.quad_form(x, a_over_tvl))
         constraints = [cp.sum(x) <= max_sumx, x <= max_x]
 
         # Solve the problem and print stdout
@@ -126,13 +128,12 @@ class YieldStrategy(VaultRebalancingStrategy):
                 'y': problem.value if problem.status == 'optimal' else None,
                 'x': x.value * self.state.wealth if problem.status == 'optimal' else None}
 
-    def optimal_weights(self, predicted_apys: np.array) -> np.array:
+    def optimal_weights(self, predicted_apys: np.array, tvl: np.array) -> np.array:
         '''
         fit_predict on current features -> predicted_apy -> convex optimization under wealth constraint + cost/risk penalty
-        then increments state and index
         '''
         ####### CVXPY version #######
-        res = self.solve_cvx_problem(predicted_apys, **self.parameters['solver_params'])
+        res = self.solve_cvx_problem(predicted_apys, tvl,  **self.parameters['solver_params'])
         if hasattr(self, 'gas_reduction_routine'):
             new_res = self.state.weights + self.gas_reduction_routine(predicted_apys, res['x']-self.state.weights)
         else:
@@ -147,7 +148,7 @@ class YieldStrategy(VaultRebalancingStrategy):
         return new_res
 
     def update_wealth(self, new_weights: np.array, prev_state: State, prev_index: datetime,
-                      cur_performance: pd.Series) -> tuple[float, float]:
+                      cur_performance: pd.Series) -> dict:
         """
         update wealth from yields, tx cost, and gas
         """
@@ -155,7 +156,9 @@ class YieldStrategy(VaultRebalancingStrategy):
 
         # yields * dt
         dt = (cur_performance.name - prev_index) / timedelta(days=365)
-        yields_dt = cur_performance.values * dt
+        tvl = self.research_engine.X.xs(level=['feature', 'window'], key=['tvl', 'as_is'], axis=1).loc[prev_index].fillna(0.0).values.clip(min=1e-18)
+        dilutor = 1 / (1 + prev_state.weights/tvl)
+        yields_dt = cur_performance.values * dilutor * dt
         base_yield_dt = 0.0
 
         # costs, evaluate before strategy value move
@@ -168,7 +171,9 @@ class YieldStrategy(VaultRebalancingStrategy):
         new_base_weight *= np.exp(base_yield_dt)
         self.state.wealth = np.sum(self.state.weights) + new_base_weight - transaction_costs - gas
 
-        return transaction_costs, gas
+        return {'transaction_costs': transaction_costs,
+                'gas': gas,
+                'dilutor': dilutor}
 #
 #     def solve_scipy_problem(self, predicted_apys: np.array):
 #         ### objective is APY - txcost (- risk?)

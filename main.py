@@ -27,14 +27,15 @@ if __name__ == "__main__":
         if not os.path.isdir(dirname):
             os.makedirs(dirname)
 
-        override_grid = {'run_parameters.models.apy.TrivialEwmPredictor.params.cap': [3],
+        override_grid = {'strategy.initial_wealth': [1e5, 1e6, 2.5e6, 5e6, 1e7],
+                            'run_parameters.models.apy.TrivialEwmPredictor.params.cap': [3],
                           'run_parameters.models.apy.TrivialEwmPredictor.params.halflife': ["10d"],
                           'strategy.cost': [0.0005],
-                          'strategy.gas': [False, 10, 20, 40],
+                          'strategy.gas': [False, 20, 50],
                          'strategy.base_buffer': [0.1],
-                          "label_map.apy.horizons": [[7], [28]],
-                          "strategy.concentration_limit": [0.4,
-                                                  0.7, 1.0]} if args[0] == 'grid' else dict()
+                         "run_parameters.models.apy.TrivialEwmPredictor.params.horizon": ["99y"],
+                          "label_map.apy.horizons": [[28]],
+                          "strategy.concentration_limit": [0.4]} if args[0] == 'grid' else dict()
         result = VaultBacktestEngine.run_grid(override_grid, parameters)
 
         if args[0] == 'grid':
