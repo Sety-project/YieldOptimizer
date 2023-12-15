@@ -32,3 +32,4 @@ protocols:
   - venus-core-pool
   - stargate
   - abracadabra
+oracle: none
