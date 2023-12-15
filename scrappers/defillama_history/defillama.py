@@ -7,6 +7,8 @@ import sys
 import asyncio
 from copy import deepcopy
 from typing import Callable
+from coingecko import myCoinGeckoAPI
+from utils.async_utils import safe_gather
 
 try:
     from utils.async_utils import async_wrap, safe_gather
@@ -73,6 +75,7 @@ class FilteredDefiLlama(DefiLlama):
         self.protocols = self.filter_protocols(protocols)
         self.shortlisted_tokens = self.filter_underlyings()
         self.pools = self.filter_pools(self.get_pools_yields())
+        self.coingeckoAPI = myCoinGeckoAPI()
 
     @abstractmethod
     def filter_underlyings(self) -> dict:
@@ -104,7 +107,13 @@ class FilteredDefiLlama(DefiLlama):
                                                  'balancer-v2',
                                                  'rocket-pool',
                                                  'pancakeswap-amm-v3',
-                                                 'spark'])]
+                                                 'spark',
+                                                 'sushiswap',
+                                                 'sushiswap-v3',
+                                                 'merkl',
+                                                 'beefy',
+                                                 'abracadabra',
+                                                 ])]
 
 
     def wide_filter_protocols(self, protocols: pd.DataFrame) -> pd.DataFrame:
@@ -139,14 +148,27 @@ class FilteredDefiLlama(DefiLlama):
     def filter_pools(self, pools: pd.DataFrame) -> pd.DataFrame:
         raise NotImplementedError
 
-    @ignore_error
-    async def apy_history(self, metadata: dict,  **kwargs) -> dict[str, pd.Series]:
+    #@ignore_error
+    async def apy_history(self, metadata: dict,  **kwargs) -> pd.DataFrame:
         '''gets various components of apy history from defillama'''
 
         # get pool history
-        pool_history = await async_wrap(defillama.get_pool_hist_apy)(metadata['pool'])
-        apy = pool_history['apy']
+        if os.path.isfile(os.path.join(os.sep, kwargs['dirname'], '{}.csv'.format(metadata['pool']))):
+            return self.read_history(kwargs, metadata)
 
+        pool_history = await async_wrap(defillama.get_pool_hist_apy)(metadata['pool'])
+        if metadata['underlyingTokens'] is not None:
+            results = await safe_gather([async_wrap(self.coingeckoAPI.fetch_market_chart)(
+                _id=self.coingeckoAPI.address_to_id(address, metadata['chain']),
+                days='max',
+                vs_currency=self.reference_asset)
+                                   for address in metadata['underlyingTokens']])
+
+            for i, (underlyingToken, prices) in enumerate(zip(metadata['underlyingTokens'], results)):
+                prices = prices.bfill().set_index('timestamp')
+                pool_history = pool_history.join(prices.rename(columns={'price': f'underlying{i}'}), how='outer').interpolate('index').loc[pool_history.index]
+
+        apy = pool_history['apy']
         apyReward = pool_history['apyReward']
 
         haircut_apy = apy
@@ -163,16 +185,23 @@ class FilteredDefiLlama(DefiLlama):
         il = pool_history['il7d'].fillna(0) * 52
         tvl = pool_history['tvlUsd']
 
-        result = pd.DataFrame({'haircut_apy': haircut_apy,
-                'apy': apy,
-                'apyReward': apyReward,
-                'il': il,
-                'tvl': tvl})/100
 
+        result = pd.DataFrame({'haircut_apy': haircut_apy / 100,
+                               'apy': apy / 100,
+                               'apyReward': apyReward / 100,
+                               'il': il,
+                               'tvl': tvl}
+                              | {f'underlying{i}': pool_history[f'underlying{i}']
+                                 for i, _ in enumerate(metadata['underlyingTokens'] or [])})
         if 'dirname' in kwargs:
             await self.write_history(kwargs, metadata, result)
 
         return result
+
+    def read_history(self, kwargs, metadata):
+        pool_history = pd.read_csv(os.path.join(os.sep, kwargs['dirname'], '{}.csv'.format(metadata['pool'])))
+        pool_history['date'] = pd.to_datetime(pool_history['date'])
+        return pool_history.set_index('date')
 
     async def write_history(self, kwargs, metadata, result):
         name = os.path.join(os.sep, kwargs['dirname'], '{}.csv'.format(metadata['pool']))
@@ -264,9 +293,9 @@ class DynLst(FilteredDefiLlama):
     '''DynLst is a class that filters pools and
     stores the historical apy of the pool and the historical apy of the underlying tokens
     '''
+    reference_asset: str = 'eth'
     def __init__(self):
         super().__init__()
-
         # get underlying history for performance
         shortlisted_tokens_ids = {
             '0xae7ab96520de3a18e5e111b5eaab095312d7fe84': '747c1d2a-c668-4682-b9f9-296708a3dd90',
@@ -302,7 +331,7 @@ class DynLst(FilteredDefiLlama):
             'project': lambda x: x in self.protocols['name'].unique(),
             'underlyingTokens': lambda x: all(
                 token.lower() in self.shortlisted_tokens.values() for token in x) if isinstance(x,
-                                                                                           list) else True,
+                                                                                                list) else True,
             'tvlUsd': lambda x: x > 1e5,
             #    'ilRisk': lambda x: not x == 'yes',
             #    'exposure': lambda x: x in ['single', 'multi'], # ignore
@@ -340,7 +369,7 @@ class DynLst(FilteredDefiLlama):
         '''gets various components of apy history from defillama'''
         dont_write_kwargs = deepcopy(kwargs)
         dont_write_kwargs.__delitem__('dirname')
-        result = await super().apy_history(metadata, **dont_write_kwargs)
+        result = await super().apy_history(metadata, **kwargs)
 
         # From Defillama GUI it seems curve and convex already have underlying apy included.
         if not metadata['project'] in ['curve-finance', 'convex-finance']:
@@ -357,6 +386,7 @@ class DynYieldE(FilteredDefiLlama):
     '''DynLst is a class that filters pools and
     stores the historical apy of the pool and the historical apy of the underlying tokens
     '''
+    reference_asset: str = 'usd'
     def filter_underlyings(self) -> dict:
         '''lower case'''
         result = {'USDC': '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
@@ -396,10 +426,43 @@ class DynYieldE(FilteredDefiLlama):
         return pools[pools.apply(lambda x: all(v(x[k]) for k, v in pool_filters.items()), axis=1)]
 
 
+class DynYieldA(FilteredDefiLlama):
+    '''DynLst is a class that filters pools and
+    stores the historical apy of the pool and the historical apy of the underlying tokens
+    '''
+    reference_asset: str = 'usd'
+    def filter_underlyings(self) -> dict:
+        '''lower case'''
+        result = {'DAI': '0xda10009cbd5d07dd0cecc66161fc93d7c9000da1',
+                  'FRAX': '0x17fc002b466eec40dae837fc4be5c67993ddbd6f',
+                  'LUSD': '0x93b346b6bc2548da6a1e7d98e9a421b42541425b',
+                  'MIM': '0xfea7a6a0b346362bf88a9e4a88416b77a57d6c2a',
+                  'sUSD': '0xa970af1a584579b618be4d69ad6f73459d112f95',
+                  'USDT': '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9',
+                  'USDC': '0xaf88d065e77c8cc2239327c5edb3a432268e5831'}
+        return {key: value.lower() for key, value in result.items()}
+
+    def filter_pools(self, pools: pd.DataFrame) -> pd.DataFrame:
+        # shortlist pools
+        pool_filters = {
+            'chain': lambda x: x in ['Arbitrum'],
+            'project': lambda x: x in self.protocols['name'].unique(),
+            'underlyingTokens': lambda x: all(
+                token.lower() in self.shortlisted_tokens.values() for token in x) if isinstance(x,
+                                                                                           list) else True,
+            'tvlUsd': lambda x: x > 1e5,
+            #    'ilRisk': lambda x: not x == 'yes',
+            #    'exposure': lambda x: x in ['single', 'multi'], # ignore
+            #    'apyMean30d': lambda x: x>4
+        }
+        return pools[pools.apply(lambda x: all(v(x[k]) for k, v in pool_filters.items()), axis=1)]
+
+
 class DynYieldB(FilteredDefiLlama):
     '''DynLst is a class that filters pools and
     stores the historical apy of the pool and the historical apy of the underlying tokens
     '''
+    reference_asset: str = 'usd'
     # shortlisted_tokens_tier2 = {
     #     'MIM': '0x99d8a9c45b2eca8864373a26d1459e3dff1e17f3',
     #     'GHO': '0x40d16fc0246ad3160ccc09b8d0d3a2cd28ae6c2f',
@@ -435,6 +498,7 @@ class DynYieldBTCE(FilteredDefiLlama):
     '''DynLst is a class that filters pools and
     stores the historical apy of the pool and the historical apy of the underlying tokens
     '''
+    reference_asset: str = 'btc'
     # shortlisted_tokens_tier2 = {
     #     'MIM': '0x99d8a9c45b2eca8864373a26d1459e3dff1e17f3',
     #     'GHO': '0x40d16fc0246ad3160ccc09b8d0d3a2cd28ae6c2f',
@@ -566,14 +630,15 @@ if __name__ == '__main__':
         coros = [defillama.apy_history(x, **history_kwargs) for _, x in defillama.pools.iterrows()]
         all_history = defillama.all_apy_history(**history_kwargs)
 
-        apy = compute_moments(all_history)
-        top_pools = print_top_pools(apy)
-        historical_best_pools = get_historical_best_pools(apy, 10, start, end).resample('d').apply('mean')
-        historical_best_pools.index = [t.replace(tzinfo=None) for t in historical_best_pools.index]
-        mean_best_history = historical_best_pools.mean(axis=1)
-        ever_been_top = defillama.pools[defillama.pools['pool'].isin(historical_best_pools.columns)]
+        if False:
+            apy = compute_moments(all_history)
+            top_pools = print_top_pools(apy)
+            historical_best_pools = get_historical_best_pools(apy, 10, start, end).resample('d').apply('mean')
+            historical_best_pools.index = [t.replace(tzinfo=None) for t in historical_best_pools.index]
+            mean_best_history = historical_best_pools.mean(axis=1)
+            ever_been_top = defillama.pools[defillama.pools['pool'].isin(historical_best_pools.columns)]
 
-        filename = os.path.join(os.sep, os.getcwd(), f'best_ever_{sys.argv[2]}.xlsx')
-        with pd.ExcelWriter(filename, engine='openpyxl', mode='w') as writer:
-            mean_best_history.to_excel(writer, 'mean_best_history')
-            ever_been_top.to_excel(writer, 'ever_been_top')
+            filename = os.path.join(os.sep, os.getcwd(), f'best_ever_{sys.argv[2]}.xlsx')
+            with pd.ExcelWriter(filename, engine='openpyxl', mode='w') as writer:
+                mean_best_history.to_excel(writer, 'mean_best_history')
+                ever_been_top.to_excel(writer, 'ever_been_top')
