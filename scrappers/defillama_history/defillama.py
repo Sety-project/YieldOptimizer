@@ -6,7 +6,11 @@ import shutil
 import sys
 import asyncio
 from copy import deepcopy
+from pathlib import Path
 from typing import Callable
+
+import yaml
+
 from coingecko import myCoinGeckoAPI
 from utils.async_utils import safe_gather
 
@@ -67,54 +71,26 @@ class FilteredDefiLlama(DefiLlama):
     '''
     filters protocols and pools from defillama
     '''
-    def __init__(self):
+    def __init__(self, config: dict = None):
         self.logger = logging.getLogger('defillama_history')
         super().__init__()
-        protocols = self.get_protocols()
-        protocols['name'] = protocols['name'].apply(lambda s: s.lower().replace(' ', '-'))
-        self.protocols = self.filter_protocols(protocols)
+        if config is not None:
+            self.protocols = sum((config['protocols'][f'tier{i+1}'] for i in range(1)), [])
+            if config['oracle'] == 'coingecko':
+                self.oracle = myCoinGeckoAPI()
+            else:
+                self.logger.warning('no valid oracle specified (only coingecko is supported)')
+        else:
+            protocols = self.get_protocols()
+            self.protocols = list(protocols['name'].apply(lambda s: s.lower().replace(' ', '-')).unique())
+
         self.shortlisted_tokens = self.filter_underlyings()
         self.pools = self.filter_pools(self.get_pools_yields())
-        self.coingeckoAPI = myCoinGeckoAPI()
 
     @abstractmethod
     def filter_underlyings(self) -> dict:
         '''filter underlyings'''
         raise NotImplementedError
-
-    def filter_protocols(self, protocols: pd.DataFrame) -> pd.DataFrame:
-        return protocols[protocols['name'].isin(['curve-dex',
-                                                 'balancer',
-                                                 'pancakeswap-amm',
-                                                 'venus-isolated-pools',
-                                                 'lido',
-                                                 'aave-v2',
-                                                 'morpho-aavev3',
-                                                 'uniswap-v2',
-                                                 'thena-v1',
-                                                 'morpho-compoundcompound-v3',
-                                                 'morpho-aave',
-                                                 'curve-finance',
-                                                 'convex-finance',
-                                                 'compound',
-                                                 'frax-ether',
-                                                 'aura',
-                                                 'venus-core-pool',
-                                                 'aave-v3',
-                                                 'uniswap-v3',
-                                                 'stargate',
-                                                 'makerdao',
-                                                 'balancer-v2',
-                                                 'rocket-pool',
-                                                 'pancakeswap-amm-v3',
-                                                 'spark',
-                                                 'sushiswap',
-                                                 'sushiswap-v3',
-                                                 'merkl',
-                                                 'beefy',
-                                                 'abracadabra',
-                                                 ])]
-
 
     def wide_filter_protocols(self, protocols: pd.DataFrame) -> pd.DataFrame:
         '''filter protocols'''
@@ -157,16 +133,8 @@ class FilteredDefiLlama(DefiLlama):
             return self.read_history(kwargs, metadata)
 
         pool_history = await async_wrap(defillama.get_pool_hist_apy)(metadata['pool'])
-        if metadata['underlyingTokens'] is not None:
-            results = await safe_gather([async_wrap(self.coingeckoAPI.fetch_market_chart)(
-                _id=self.coingeckoAPI.address_to_id(address, metadata['chain']),
-                days='max',
-                vs_currency=self.reference_asset)
-                                   for address in metadata['underlyingTokens']])
-
-            for i, (underlyingToken, prices) in enumerate(zip(metadata['underlyingTokens'], results)):
-                prices = prices.bfill().set_index('timestamp')
-                pool_history = pool_history.join(prices.rename(columns={'price': f'underlying{i}'}), how='outer').interpolate('index').loc[pool_history.index]
+        if hasattr(self, 'oracle'):
+            pool_history = await self.fetch_oracle(metadata, pool_history)
 
         apy = pool_history['apy']
         apyReward = pool_history['apyReward']
@@ -186,17 +154,35 @@ class FilteredDefiLlama(DefiLlama):
         tvl = pool_history['tvlUsd']
 
 
-        result = pd.DataFrame({'haircut_apy': haircut_apy / 100,
+        res_dict = {'haircut_apy': haircut_apy / 100,
                                'apy': apy / 100,
                                'apyReward': apyReward / 100,
                                'il': il,
                                'tvl': tvl}
-                              | {f'underlying{i}': pool_history[f'underlying{i}']
-                                 for i, _ in enumerate(metadata['underlyingTokens'] or [])})
+        if metadata['underlyingTokens'] is None and hasattr(self, 'oracle'):
+            res_dict |= {f'underlying{i}': pool_history[f'underlying{i}']
+                         for i, _ in enumerate(metadata['underlyingTokens'])}
+        result = pd.DataFrame(res_dict)
+
         if 'dirname' in kwargs:
             await self.write_history(kwargs, metadata, result)
 
         return result
+
+    async def fetch_oracle(self, metadata, pool_history):
+        if metadata['underlyingTokens'] is not None:
+            results = await safe_gather([async_wrap(self.oracle.fetch_market_chart)(
+                _id=self.oracle.address_to_id(address, metadata['chain']),
+                days='max',
+                vs_currency=self.reference_asset)
+                for address in metadata['underlyingTokens']])
+
+            for i, (underlyingToken, prices) in enumerate(zip(metadata['underlyingTokens'], results)):
+                prices = prices.bfill().set_index('timestamp')
+                pool_history = \
+                pool_history.join(prices.rename(columns={'price': f'underlying{i}'}), how='outer').interpolate(
+                    'index').loc[pool_history.index]
+        return pool_history
 
     def read_history(self, kwargs, metadata):
         pool_history = pd.read_csv(os.path.join(os.sep, kwargs['dirname'], '{}.csv'.format(metadata['pool'])))
@@ -204,7 +190,8 @@ class FilteredDefiLlama(DefiLlama):
         return pool_history.set_index('date')
 
     async def write_history(self, kwargs, metadata, result):
-        name = os.path.join(os.sep, kwargs['dirname'], '{}.csv'.format(metadata['pool']))
+        pool_name = '_'.join([metadata[key] for key in ['chain', 'project', 'symbol', 'poolMeta'] if metadata[key]])
+        name = os.path.join(os.sep, kwargs['dirname'], '{}.csv'.format(pool_name))
         await async_to_csv(result, name, mode='w', header=True)
 
     @ignore_error
@@ -267,6 +254,7 @@ class DiscoveryDefiLlama(FilteredDefiLlama):
         self.chains = chains
         self.apy_floor = apy_floor
         self.tvlUsd_floor = tvlUsd_floor
+
         super().__init__()
 
     def filter_underlyings(self) -> dict:
@@ -278,10 +266,9 @@ class DiscoveryDefiLlama(FilteredDefiLlama):
         # shortlist pools
         pool_filters = {
             'chain': lambda x: x in self.chains,
-            'project': lambda x: x in self.protocols['name'].unique(),
+            'project': lambda x: x in self.protocols,
             # 'underlyingTokens': lambda x: all(
-            #     token.lower() in self.shortlisted_tokens.values() for token in x) if isinstance(x,
-            #                                                                                list) else True,
+            #     token.lower() in self.shortlisted_tokens.values() for token in x),
             'tvlUsd': lambda x: x > self.tvlUsd_floor,
             'ilRisk': lambda x: not x == 'yes',
             #    'exposure': lambda x: x in ['single', 'multi'], # ignore
@@ -294,8 +281,8 @@ class DynLst(FilteredDefiLlama):
     stores the historical apy of the pool and the historical apy of the underlying tokens
     '''
     reference_asset: str = 'eth'
-    def __init__(self):
-        super().__init__()
+    def __init__(self, config: dict = None):
+        super().__init__(config)
         # get underlying history for performance
         shortlisted_tokens_ids = {
             '0xae7ab96520de3a18e5e111b5eaab095312d7fe84': '747c1d2a-c668-4682-b9f9-296708a3dd90',
@@ -306,8 +293,11 @@ class DynLst(FilteredDefiLlama):
             '0xbe9895146f7af43049ca1c1ae358b0541ea49704': '0f45d730-b279-4629-8e11-ccb5cc3038b4',
             '0xf951e335afb289353dc249e82926178eac7ded78': 'ca2acc2d-6246-44aa-ae91-8725b2c62c7c',
             '0x856c4efb76c1d1ae02e20ceb03a2a6a08b0b8dc3': '423681e3-4787-40ce-ae43-e9f67c5269b3'}
-        self.shortlisted_tokens_history = {k: self.get_pool_hist_apy(v)['apy']/100 for k, v in
-                                           shortlisted_tokens_ids.items()}
+        coros = [async_wrap(self.get_pool_hist_apy)(v)
+                 for v in shortlisted_tokens_ids.values()]
+        results = asyncio.run(safe_gather(coros))
+        self.shortlisted_tokens_history = {k: results[i]['apy']/100
+                                           for i, k in enumerate(shortlisted_tokens_ids)}
     def filter_underlyings(self):
         '''lowercase ! filter tokens that are not in the shortlist'''
         result = {'stETH': '0xae7ab96520de3a18e5e111b5eaab095312d7fe84',
@@ -328,10 +318,10 @@ class DynLst(FilteredDefiLlama):
         # shortlist pools
         pool_filters = {
             'chain': lambda x: x in ['Ethereum'],
-            'project': lambda x: x in self.protocols['name'].unique(),
+            'project': lambda x: x in self.protocols,
             'underlyingTokens': lambda x: all(
                 token.lower() in self.shortlisted_tokens.values() for token in x) if isinstance(x,
-                                                                                                list) else True,
+                                                                                                list) else False,
             'tvlUsd': lambda x: x > 1e5,
             #    'ilRisk': lambda x: not x == 'yes',
             #    'exposure': lambda x: x in ['single', 'multi'], # ignore
@@ -414,10 +404,10 @@ class DynYieldE(FilteredDefiLlama):
         # shortlist pools
         pool_filters = {
             'chain': lambda x: x in ['Ethereum'],
-            'project': lambda x: x in self.protocols['name'].unique(),
+            'project': lambda x: x in self.protocols,
             'underlyingTokens': lambda x: all(
                 token.lower() in self.shortlisted_tokens.values() for token in x) if isinstance(x,
-                                                                                           list) else True,
+                                                                                           list) else False,
             'tvlUsd': lambda x: x > 1e5,
             #    'ilRisk': lambda x: not x == 'yes',
             #    'exposure': lambda x: x in ['single', 'multi'], # ignore
@@ -446,10 +436,10 @@ class DynYieldA(FilteredDefiLlama):
         # shortlist pools
         pool_filters = {
             'chain': lambda x: x in ['Arbitrum'],
-            'project': lambda x: x in self.protocols['name'].unique(),
+            'project': lambda x: x in self.protocols,
             'underlyingTokens': lambda x: all(
                 token.lower() in self.shortlisted_tokens.values() for token in x) if isinstance(x,
-                                                                                           list) else True,
+                                                                                           list) else False,
             'tvlUsd': lambda x: x > 1e5,
             #    'ilRisk': lambda x: not x == 'yes',
             #    'exposure': lambda x: x in ['single', 'multi'], # ignore
@@ -482,7 +472,7 @@ class DynYieldB(FilteredDefiLlama):
         # shortlist pools
         pool_filters = {
             'chain': lambda x: x in ['BSC'],
-            'project': lambda x: x in self.protocols['name'].unique(),
+            'project': lambda x: x in self.protocols,
             'underlyingTokens': lambda x: all(
                 token.lower() in self.shortlisted_tokens.values() for token in x) if isinstance(x,
                                                                                            list) else False,
@@ -499,30 +489,16 @@ class DynYieldBTCE(FilteredDefiLlama):
     stores the historical apy of the pool and the historical apy of the underlying tokens
     '''
     reference_asset: str = 'btc'
-    # shortlisted_tokens_tier2 = {
-    #     'MIM': '0x99d8a9c45b2eca8864373a26d1459e3dff1e17f3',
-    #     'GHO': '0x40d16fc0246ad3160ccc09b8d0d3a2cd28ae6c2f',
-    #     'sUSD': '0x57ab1ec28d129707052df4df418d58a2d46d5f51',
-    #     'eUSD': '0xa0d69e286b938e21cbf7e51d71f6a4c8918f482f',
-    #     'crvUSD': '0x8092ac8f4fe9e147098632482598f5855b25ee2f',
-    # 'BLUSD': '0xb9d7dddca9a4ac480991865efef82e01273f79c3',
-    # 'FRAXBP': '0x3175df0976dfa876431c2e9ee6bc45b65d3473cc',
-    # '3CRV': '0x6c3f90f043a72fa612cbac8115ee7e52bde6e490',
-    # ,
-    # }
 
     def filter_underlyings(self) -> dict:
         result = {'WBTC': '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599'}
         return {key: value.lower() for key, value in result.items()}
 
-    def filter_protocols(self, protocols: pd.DataFrame):
-        return protocols
-
     def filter_pools(self, pools: pd.DataFrame) -> pd.DataFrame:
         # shortlist pools
         pool_filters = {
             'chain': lambda x: x in ['Ethereum'],
-            'project': lambda x: x in self.protocols['name'].unique(),
+            'project': lambda x: x in self.protocols,
             'underlyingTokens': lambda x: all(
                 token.lower() in self.shortlisted_tokens.values() for token in x) if isinstance(x,
                                                                                            list) else False,
@@ -604,7 +580,9 @@ if __name__ == '__main__':
             defillama = DiscoveryDefiLlama(**kwargs)
         else:
             if sys.argv[2] in globals():
-                defillama = globals()[sys.argv[2]]()
+                with open(sys.argv[3], 'r') as fp:
+                    config = yaml.safe_load(fp)
+                defillama = globals()[sys.argv[2]](config)
             else:
                 raise ValueError
 
