@@ -602,7 +602,7 @@ class DefillamaResearchEngine(ResearchEngine):
         for filename in os.listdir(dirname):
             filesplit = filename.split('.csv')
             instrument: Instrument = Instrument(filesplit[0])
-            if Instrument(instrument) in selected_instruments:
+            if (Instrument(instrument) in selected_instruments) or (selected_instruments == 'all'):
                 new_df = pd.read_csv(os.path.join(os.sep, dirname, filename),
                                      parse_dates=['date'],
                                      date_parser=lambda x: pd.to_datetime(x, unit='ns', utc=True))
