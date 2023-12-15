@@ -89,6 +89,7 @@ class VaultBacktestEngine:
         temp['dilutor'] = step_results['dilutor']
 
         temp = pd.DataFrame(temp).fillna(0.0)
+        temp.index = self.performance.columns
 
         for col in ['full_apy', 'apy', 'pred_apy']:
             temp.loc['total', col] = (temp[col] * temp['weights']).sum() / temp['weights'].apply(lambda x: np.clip(x, a_min= 1e-8, a_max=None)).sum()
