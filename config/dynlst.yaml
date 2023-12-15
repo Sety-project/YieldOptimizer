@@ -4,27 +4,33 @@ input_data:
   - data
   - DynLst
   selected_instruments: # this comes from top n ever
+  - "883ba955-323f-4c0a-8a53-2e914be7bb39" # pancakeswap-amm-v3_WSTETH-WETH
+  - "5685fa0d-a7cf-4b60-9b77-ff23b4583f81" # uniswap-v3_RETH-WETH
   - "45ec4aa9-c1db-46ce-ab74-9c78a2b17a48" # aura_WETH-SWETH
   - "98463e86-e32c-4998-830c-ccd47dbb3041" # aura_WSTETH-WETH
-  - "5ce23e7e-3800-4c9c-ad30-6db3db0515a1" # convex-finance_ETH-STETH
-  - "77020688-e1f9-443c-9388-e51ace15cc32" # frax-ether_SFRXETH
-  - "e6435aae-cbe9-4d26-ab2c-a4d533db9972" # aave-v3_WSTETH
+  - "ecd0c563-8aa2-423e-b8e9-d3259a316df9" # uniswap-v3_WSTETH-WETH
+  - "473a2c92-cc86-4f86-b380-85141bcec627" # uniswap-v3_CBETH-WETH
+  - "d9e834a1-c6f0-44a4-a45c-b80d40318837" # curve-dex_ETH-CBETH
+  - "64e26366-3582-439c-b1de-b7cf84cf2749" # uniswap-v3_WETH-SWETH
+  - "f8931ddf-5ef0-4eb6-9ddf-718cd3f1a172" # uniswap-v3_STETH-WETH
+  - "498dd436-58b1-41c4-bde9-981ced59203b" # pancakeswap-amm-v3_RETH-WETH
+  - "0dd4c573-a3c6-4c35-9bc3-d618aacbc58c" # curve-dex_RETH-FRXETH
   - "3046ac00-53f7-4ad5-b1f8-c323501d4d3e" # convex-finance_ETH-CBETH
   - "ad69ffab-73be-4900-9c85-e76089f514f0" # balancer-v2_WSTETH-CBETH
-  - "c9873dab-0979-478c-b48c-3c3a0c935449" # convex-finance_STETH-FRXETH
-  - "42c02674-f7a2-4cb0-be3d-ade268838770" # balancer-v2_RETH-WETH
+  - "5455e498-1ca6-4f36-80f4-cf6a2f977c51" # curve-dex_WETH-FRXETH
+  - "5685fa0d-a7cf-4b60-9b77-ff23b4583f81" # uniswap-v3_RETH-WETH
   - "98463e86-e32c-4998-830c-ccd47dbb3041" # aura_WSTETH-WETH
-  - "fc7701fc-e290-4606-a8be-9e4ba6c5f91a" # convex-finance_ETH-RETH
-  - "5ce23e7e-3800-4c9c-ad30-6db3db0515a1" # convex-finance_ETH-STETH
-  - "75eeeb8e-e34e-4607-bd92-e527b3062f9e" # convex-finance_RETH-WSTETH
-  - "fdf02dc0-c38d-4850-8d61-74668d281325" # aave-v3_CBETH
-  - "f1a22245-a1f1-4389-8ff2-dde4914b272d" # aave-v3_RETH
+  - "64e26366-3582-439c-b1de-b7cf84cf2749" # uniswap-v3_WETH-SWETH
+  - "e36002fe-047b-439a-9d83-2873f41825e9" # pancakeswap-amm-v3_CBETH-WETH
   - "a4b5b995-99e7-4b8f-916d-8940b5627d70" # aura_RETH-WETH
   - "93f893b3-fa07-42a2-bfb8-b237501288e7" # aura_WSTETH-CBETH
-  - "4fc7d3dc-a6f0-40e6-af53-ab9d6b50b5c0" # convex-finance_WETH-FRXETH
-  - "747c1d2a-c668-4682-b9f9-296708a3dd90" # lido_STETH
+  - "b4beb796-4904-457f-9d6f-083ef08aaeba" # pancakeswap-amm-v3_FRXETH-WETH
+  - "3c5c184e-a207-4a89-a625-fa1664d45c7e" # uniswap-v3_OETH-WETH
+  - "ecd0c563-8aa2-423e-b8e9-d3259a316df9" # uniswap-v3_WSTETH-WETH
+  - "30f3b82f-07db-4b92-8657-1ebb277dc23b" # convex-finance_RETH-FRXETH
   - "ce70e358-6668-498c-9afa-651f770eac27" # aura_WSTETH-SFRXETH-RETH
-  - "6d342d6a-9796-443e-8152-b94e8b6021fc" # convex-finance_ETH-FRXETH
+  - "8b55f2ca-0f4b-4dbd-8d02-62e8bc397fb9" # curve-dex_WSTETH-RETH-SFRXETH
+  - "e144a863-8013-49d4-8c3c-637ffd415308" # uniswap-v2_STETH-WETH
   start_date: '2022-09-15T00:00:00'
 run_parameters:
   normalize: false
@@ -36,10 +42,19 @@ run_parameters:
         params:
           cap: 3 # stdev threshold of outlier yield
           halflife: 7d # ewm window for prediction
+          horizon: 99y # horizon for depeg conversion to apy
   pickle_file: engine.pickle
   unit_test: false
 feature_map: # each feature present here will be transformed. times are in days.
   apy:
+    as_is:
+  tvl:
+    as_is:
+  underlying1:
+    as_is:
+  underlying2:
+    as_is:
+  underlying3:
     as_is:
 label_map:
   apy:
@@ -50,7 +65,7 @@ strategy:
   gas: 20 # in $
   base_buffer: 0.1 # relative to wealth
   concentration_limit: 0.4
-  initial_wealth: 1000000
+  initial_wealth: 100000
   solver_params:
     solver: "ECOS"
     verbose: false
@@ -60,5 +75,5 @@ strategy:
     reltol: 0.01
     feastol: 0.01
 backtest:
-  start_date: '2022-10-01T00:00:00'
-  end_date: '2023-10-01T00:00:00'
+  start_date: '2022-12-01T00:00:00'
+  end_date: '2023-12-01T00:00:00'

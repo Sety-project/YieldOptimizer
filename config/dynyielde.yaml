@@ -10,39 +10,40 @@ input_data:
   - "d536e3f6-adf1-4364-afc9-ee8755b81d98" # convex-finance_MKUSD-FRAXBP
   - "e737d721-f45c-40f0-9793-9f56261862b9" # uniswap-v3_USDC-USDT
   - "1343a280-7812-4bc3-8f98-d1c37e11d271" # morpho-aave_USDT
-  - "3f6aa14f-eb0c-4738-bf74-8bc666f7d2b1" # curve-dex_FRAX-USDC
   - "de91ccee-cb64-43be-b1d8-124f79ef62a0" # uniswap-v3_LUSD-USDC
-  - "8ec9e3e2-1eb5-4c47-82de-edcc825ca4cc" # curve-dex_CDAI-CUSDC
+  - "ef8fbf02-ac96-4453-a78c-37bda4cd65e3" # aave-v3_LUSD
   - "802d35a2-5bae-456f-a2a9-4e1b48e0dec5" # uniswap-v3_DAI-USDT
-  - "a3ffd3fe-b21c-44eb-94d5-22c80057a600" # convex-finance_USDT-CRVUSD
+  - "05f4c3de-5f25-4219-89b8-d0cc7ffe4648" # uniswap-v3_CDAI-DAI
   - "57647093-2868-4e65-97ab-9cae8ec74e7d" # compound_USDT
   - "a349fea4-d780-4e16-973e-70ca9b606db2" # aave-v2_USDC
   - "bd072651-d99c-4154-aeae-51f12109c054" # convex-finance_FRAX-USDC
-  - "c8a24fee-ec00-4f38-86c0-9f6daebc4225" # makerdao_DAI
   - "15cbe783-dc40-4533-aa60-94b8d338aa7c" # curve-dex_SUSD-CRVUSD
   - "d6075f35-4bf7-4eed-8a77-d8e86381645f" # curve-dex_MKUSD-FRAXBP
   - "e3ddd6f7-7490-4e28-a933-8b01f7fa94eb" # curve-dex_CRVUSD-SDAI
-  - "e26ce7d9-db75-4aa4-b1db-cc21ae17bdfb" # spark_DAI
+  - "2685c31c-4a36-441b-baec-613490a91b1b" # uniswap-v3_LUSD-DAI
   - "3f196708-7e0e-4add-ba1a-5430f42d1f43" # convex-finance_MKUSD-CRVUSD
-  - "cc110152-36c2-4e10-9c12-c5b4eb662143" # compound_DAI
   - "b8bcdf8e-96ed-40ca-a7aa-aa048b9874e5" # morpho-aave_DAI
   - "12cca1f0-e3a1-4e3b-8806-e93a84f8219f" # curve-dex_LUSD-CRVUSD
-  - "064f6e65-818d-4678-8eae-e76e658b7d2b" # aura_R-DAI
+  - "2cb9d864-fbd3-48d3-bc4d-5d9b44f4b7e6" # pancakeswap-amm-v3_DAI-USDC
   - "30339b96-be67-45e5-87cb-adcd91049803" # convex-finance_ADAI-AUSDC-AUSDT
+  - "e2c09021-0aa8-42b6-a596-5422c2e35399" # uniswap-v2_USDC-USDT
   - "4fd1722d-91b1-48e5-8793-10107558b7e7" # curve-dex_MKUSD-CRVUSD
+  - "8a922da8-ee3c-44c8-a6c0-68bed39089c2" # pancakeswap-amm-v3_USDC-USDT
   - "e737d721-f45c-40f0-9793-9f56261862b9" # uniswap-v3_USDC-USDT
   - "e2727ff5-ff01-4d50-8cfa-bbe6822f8cb1" # convex-finance_LUSD-CRVUSD
-  - "cefa9bb8-c230-459a-a855-3b94e96acd8c" # compound_USDC
   - "411af006-56b0-480a-9586-1071bccbd178" # convex-finance_FRAX-CRVUSD
   - "aa70268e-4b52-42bf-a116-608b370f9501" # aave-v3_USDC
-  - "90a3e412-e3be-47e1-a233-fd3760f4a794" # curve-dex_USDT-CRVUSD
+  - "802d35a2-5bae-456f-a2a9-4e1b48e0dec5" # uniswap-v3_DAI-USDT
   - "e3f861c0-c2b9-4b50-b799-a036a3f11da1" # curve-dex_ADAI-AUSDC-AUSDT
+  - "f52ef68d-6413-4e7f-8ab1-09a994c96c76" # convex-finance_SUSD-CRVUSD
   - "e3ddd6f7-7490-4e28-a933-8b01f7fa94eb" # curve-dex_CRVUSD-SDAI
-  - "755fcec6-f4fd-4150-9184-60f099206694" # convex-finance_USDC-CRVUSD
-  - "3665ee7e-6c5d-49d9-abb7-c47ab5d9d4ac" # aave-v3_DAI
-  - "b1e6b42d-82fa-4866-a12a-8cb00bba5179" # aura_R-SDAI
+  - "5f503a0a-61da-4488-a234-45834cf8c61c" # aave-v2_FRAX
+  - "c3b238b8-e1b8-43a5-8079-99a73f3dc981" # convex-finance_LUSD-FRAXBP
+  - "2250e342-b781-4b5a-a8d5-16628bab1d2f" # aave-v2_SUSD
+  - "e78f64a8-295d-4441-82e4-d05ebd1a8b38" # convex-finance_CDAI-CUSDC
   - "f981a304-bb6c-45b8-b0c5-fd2f515ad23a" # aave-v3_USDT
-  - "60d657c9-5f63-4771-a85b-2cf8d507ec00" # aave-v2_USDT
+  - "d371fc69-9a77-4336-a129-ec79c9548266" # uniswap-v3_FRAX-USDC
+  - "fb8326d3-ab14-42ba-98c6-634c554ea040" # uniswap-v3_USDC-CRVUSD
   start_date: '2022-09-15T00:00:00'
 run_parameters:
   normalize: false
@@ -54,17 +55,26 @@ run_parameters:
         params:
           cap: 3 # stdev threshold of outlier yield
           halflife: 7d # ewm window for prediction
+          horizon: 99y # horizon for depeg conversion to apy
   unit_test: false
 feature_map: # each feature present here will be transformed. times are in days.
   apy:
     as_is:
+  tvl:
+    as_is:
+  underlying1:
+    as_is:
+  underlying2:
+    as_is:
+  underlying3:
+    as_is:
 label_map:
   apy:
-    horizons: # only first is used for now
+    horizons: # only first is used, for now
       - 28
 strategy:
   cost: 0.0005 # 1e-4 is a bp
-  gas: 20 # in $
+  gas: 50 # in $
   base_buffer: 0.10 # relative to wealth
   concentration_limit: 0.4
   initial_wealth: 1000000
@@ -77,5 +87,5 @@ strategy:
     reltol: 0.01
     feastol: 0.01
 backtest:
-  start_date: '2022-10-01T00:00:00'
-  end_date: '2023-10-01T00:00:00'
+  start_date: '2022-12-01T00:00:00'
+  end_date: '2023-12-01T00:00:00'

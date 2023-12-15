@@ -4,13 +4,12 @@ input_data:
   - data
   - DynYieldB
   selected_instruments: # this comes from top n ever
+  - "01154cd5-0642-40cd-b1cf-1de07ffaff4c" # pancakeswap-amm_USDT-USDC
   - "282baaa9-11ef-4e72-8ade-efe0c43c07cc" # pancakeswap-amm-v3_USDT-USDC
-  - "89eba1e5-1b1b-47b6-958b-38138a04c244" # venus_USDC
-  - "8e1300db-21a5-4a27-bf3f-5788236df4eb" # radiant-v2_USDT
-  - "92927cf2-f501-448c-8ed9-fb41b19e4efc" # radiant-v2_USDC
-  - "9f3a6015-5045-4471-ba65-ad3dc7c38269" # venus_USDT
+  - "9f3a6015-5045-4471-ba65-ad3dc7c38269" # venus-core-pool_USDT
   - "a2e7bb87-b339-44d9-91d7-87a04552afe9" # stargate_USDT
-  - "b2e9d5fe-19ca-456b-8cd5-c296d635136f" # pancakeswap-amm-v3_USDT-USDC
+  - "89eba1e5-1b1b-47b6-958b-38138a04c244" # venus-core-pool_USDC
+  - "7f81b151-a769-45d3-ae54-ef378633f035" # venus-core-pool_DAI
   start_date: '2022-09-15T00:00:00'
 run_parameters:
   normalize: false
@@ -22,10 +21,19 @@ run_parameters:
         params:
           cap: 3 # stdev threshold of outlier yield
           halflife: 7d # ewm window for prediction
+          horizon: 99y # horizon for depeg conversion to apy
   pickle_file: engine.pickle
   unit_test: false
 feature_map: # each feature present here will be transformed. times are in days.
   apy:
+    as_is:
+  tvl:
+    as_is:
+  underlying1:
+    as_is:
+  underlying2:
+    as_is:
+  underlying3:
     as_is:
 label_map:
   apy:
