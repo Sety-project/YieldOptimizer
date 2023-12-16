@@ -51,7 +51,7 @@ def plot_perf(backtest: pd.DataFrame, base_buffer: float) -> None:
     st.write(f'max apy mean = {max_apy.mean()}')
 
 
-st.title('Yield optimizer backtest')
+st.title('Yield optimizer backtest, by sety-project.eth')
 
 # load whitelisted protocols from yaml
 with open(os.path.join(os.sep, os.getcwd(), "config", f'whitelist.yaml'), 'r') as fp:
