@@ -11,8 +11,9 @@ from typing import Callable
 
 import yaml
 
-from coingecko import myCoinGeckoAPI
+from scrappers.defillama_history.coingecko import myCoinGeckoAPI
 from utils.async_utils import safe_gather
+from streamlit import cache_data
 
 try:
     from utils.async_utils import async_wrap, safe_gather
@@ -86,6 +87,9 @@ class FilteredDefiLlama(DefiLlama):
 
         self.shortlisted_tokens = self.filter_underlyings()
         self.pools = self.filter_pools(self.get_pools_yields())
+        self.pools['name'] = self.pools.apply(lambda x: '_'.join([x[key]
+                                                                  for key in ['chain', 'project', 'symbol', 'poolMeta'] if x[key]]),
+                                              axis=1)
 
     @abstractmethod
     def filter_underlyings(self) -> dict:
@@ -129,10 +133,12 @@ class FilteredDefiLlama(DefiLlama):
         '''gets various components of apy history from defillama'''
 
         # get pool history
-        if os.path.isfile(os.path.join(os.sep, kwargs['dirname'], '{}.csv'.format(metadata['pool']))):
+        if os.path.isfile(
+            os.path.join(os.sep, kwargs['dirname'], f"{metadata['name']}.csv")
+        ):
             return self.read_history(kwargs, metadata)
 
-        pool_history = await async_wrap(defillama.get_pool_hist_apy)(metadata['pool'])
+        pool_history = await async_wrap(self.get_pool_hist_apy)(metadata['pool'])
         if hasattr(self, 'oracle'):
             pool_history = await self.fetch_oracle(metadata, pool_history)
 
@@ -140,14 +146,13 @@ class FilteredDefiLlama(DefiLlama):
         apyReward = pool_history['apyReward']
 
         haircut_apy = apy
-        if kwargs is not None and 'reward_history' in kwargs:
-            if metadata['rewardTokens'] not in [None, []]:
-                token_addrs_n_chains = {rewardToken: metadata['chain'] for rewardToken in metadata['rewardTokens']}
-                reward_discount = await self.discount_reward_by_minmax(token_addrs_n_chains, **kwargs)
-                interpolated_discount = \
-                reward_discount.reindex(apyReward.index.union(reward_discount.index)).interpolate().loc[apyReward.index]
-                apyReward = apyReward.interpolate(method='linear').fillna(0)
-                haircut_apy = apy - (1 - interpolated_discount) * apyReward
+        if kwargs is not None and 'reward_history' in kwargs and metadata['rewardTokens'] not in [None, []]:
+            token_addrs_n_chains = {rewardToken: metadata['chain'] for rewardToken in metadata['rewardTokens']}
+            reward_discount = await self.discount_reward_by_minmax(token_addrs_n_chains, **kwargs)
+            interpolated_discount = \
+                    reward_discount.reindex(apyReward.index.union(reward_discount.index)).interpolate().loc[apyReward.index]
+            apyReward = apyReward.interpolate(method='linear').fillna(0)
+            haircut_apy = apy - (1 - interpolated_discount) * apyReward
 
         # pathetic attempt at IL...
         il = pool_history['il7d'].fillna(0) * 52
@@ -185,13 +190,16 @@ class FilteredDefiLlama(DefiLlama):
         return pool_history
 
     def read_history(self, kwargs, metadata):
-        pool_history = pd.read_csv(os.path.join(os.sep, kwargs['dirname'], '{}.csv'.format(metadata['pool'])))
+        pool_history = pd.read_csv(
+            os.path.join(os.sep, kwargs['dirname'], f"{metadata['name']}.csv")
+        )
         pool_history['date'] = pd.to_datetime(pool_history['date'])
         return pool_history.set_index('date')
 
     async def write_history(self, kwargs, metadata, result):
-        pool_name = '_'.join([metadata[key] for key in ['chain', 'project', 'symbol', 'poolMeta'] if metadata[key]])
-        name = os.path.join(os.sep, kwargs['dirname'], '{}.csv'.format(pool_name))
+        if not os.path.isdir(kwargs['dirname']):
+            os.makedirs(kwargs['dirname'], mode=0o777)
+        name = os.path.join(os.sep, kwargs['dirname'], '{}.csv'.format(metadata['name']))
         await async_to_csv(result, name, mode='w', header=True)
 
     @ignore_error
@@ -348,7 +356,7 @@ class DynLst(FilteredDefiLlama):
                     raise TypeError
 
                 apys.append(reserves * shortlisted_tokens_history[u])
-        if len(apys) > 0:
+        if apys:
             return pd.concat(apys, axis=1).sum(axis=1)
         else:
             # some random time series = 0
@@ -362,7 +370,7 @@ class DynLst(FilteredDefiLlama):
         result = await super().apy_history(metadata, **kwargs)
 
         # From Defillama GUI it seems curve and convex already have underlying apy included.
-        if not metadata['project'] in ['curve-finance', 'convex-finance']:
+        if metadata['project'] not in ['curve-finance', 'convex-finance']:
             # TODO: reserve ratio
             apy_underlyings = self.underlying_apy(metadata['underlyingTokens'], self.shortlisted_tokens_history)
             result['underlying_apy'] = apy_underlyings
@@ -548,6 +556,13 @@ def print_top_pools(new_apy: dict[str,pd.DataFrame], filename: str='defillama_hi
         print('Please close the excel file')
     return top_pools
 
+
+@cache_data
+def fetch_defillama(vault_name: str, config: dict, dirname: str):
+    defillama = globals()[vault_name](config)
+    return defillama.all_apy_history(dirname=dirname)
+
+
 if __name__ == '__main__':
     if sys.argv[1] == 'defillama':
         # Create a DefiLlama instance
@@ -586,27 +601,10 @@ if __name__ == '__main__':
             else:
                 raise ValueError
 
-
-        # prepare history arguments
         dirname = os.path.join(os.sep, os.getcwd(), 'data', sys.argv[2])
         if not os.path.isdir(dirname):
             os.makedirs(dirname)
-        date_format = '%Y-%m-%d %H:%M:%S %Z'
-        end = datetime.now().replace(tzinfo=timezone.utc)
-        start = end - timedelta(days=365)
-        history_kwargs = {'dirname': dirname,
-                          #'reward_history': None
-                              # {'discount_lookback': timedelta(days=90),
-                              #  'end': end.strftime(date_format),
-                              #  'end_format': date_format,
-                              #  'span': 900,
-                              #  'period': '1d'}
-                          }
-
-        # fetch everything asynchronously
-        keys = defillama.pools['pool'].tolist()
-        coros = [defillama.apy_history(x, **history_kwargs) for _, x in defillama.pools.iterrows()]
-        all_history = defillama.all_apy_history(**history_kwargs)
+        all_history = defillama.all_apy_history(dirname=dirname)
 
         if False:
             apy = compute_moments(all_history)

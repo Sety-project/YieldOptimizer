@@ -57,6 +57,7 @@ run_parameters:
           halflife: 7d # ewm window for prediction
           horizon: 99y # horizon for depeg conversion to apy
   unit_test: false
+  use_cache: false
 feature_map: # each feature present here will be transformed. times are in days.
   apy:
     as_is:

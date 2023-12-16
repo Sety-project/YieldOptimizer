@@ -43,7 +43,7 @@ run_parameters:
           cap: 3 # stdev threshold of outlier yield
           halflife: 7d # ewm window for prediction
           horizon: 99y # horizon for depeg conversion to apy
-  pickle_file: engine.pickle
+  use_cache: false
   unit_test: false
 feature_map: # each feature present here will be transformed. times are in days.
   apy:

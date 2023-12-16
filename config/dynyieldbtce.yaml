@@ -16,7 +16,7 @@ run_parameters:
           cap: 3 # stdev threshold of outlier yield
           halflife: 7d # ewm window for prediction
           horizon: 99y # horizon for depeg conversion to apy
-  pickle_file: engine.pickle
+  use_cache: false
   unit_test: false
 feature_map: # each feature present here will be transformed. times are in days.
   apy:
@@ -35,7 +35,7 @@ label_map:
       - 28
 strategy:
   cost: 0.0005 # 1e-4 is a bp
-  gas: false # in $
+  gas: 0 # in $
   base_buffer: 0.1 # relative to wealth
   concentration_limit: 0.7
   initial_wealth: 1000000

@@ -54,7 +54,7 @@ class VaultBacktestEngine:
             name_to_str = ''.join(['{}_'.format(str(elem)) for elem in name]) + '_backtest.csv'
             vault_name = parameters['input_data']['dirpath'][-1].lower()
             filename = os.path.join(os.sep, os.getcwd(), "logs", vault_name, name_to_str)
-            if os.path.isfile(filename):
+            if os.path.isfile(filename) and parameters['run_parameters']['use_cache']:
                 logging.getLogger('defillama').warning(f'{filename} already run - delete it to rerun')
                 result = pd.read_csv(filename, index_col=0, header=[0, 1], parse_dates=True)
                 perf = VaultBacktestEngine.perf_analysis(result)
