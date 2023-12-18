@@ -55,10 +55,98 @@ def apply_decorator(cls):
 
 @apply_decorator
 class myCoinGeckoAPI(pycoingecko.CoinGeckoAPI):
-    chain_mapping = {'ethereum': 'ethereum','arbitrum':'arbitrum-one','binance': 'binance-smart-chain'}
+    defillama_mapping = ({'id': 'id',
+                         'symbol': 'symbol',
+                         'name': 'name'}|
+                         {'alephium': 'Alephium',
+                          'algorand': 'Algorand',
+                          'aptos': 'Aptos',
+                          'arbitrum-nova': 'Arbitrum Nova',
+                          'arbitrum-one': 'Arbitrum',
+                          'astar': 'Astar',
+                          'aurora': 'Aurora',
+                          'avalanche': 'Avalanche',
+                          'base': 'Base',
+                          'binance-smart-chain': 'Binance',
+                          'bitcoin-cash': 'Bitcoin',
+                          'bitgert': 'Bitgert',
+                          'bittorrent': 'Bittorrent',
+                          'boba': 'Boba',
+                          'canto': 'Canto',
+                          'cardano': 'Cardano',
+                          'celo': 'Celo',
+                          'conflux': 'Conflux',
+                          'core': 'CORE',
+                          'cosmos': 'Cosmos',
+                          'cronos': 'Cronos',
+                          'cube': 'Cube',
+                          'dogechain': 'Dogechain',
+                          'elastos': 'Elastos',
+                          'elrond': 'Elrond',
+                          'empire': 'Empire',
+                          'eos': 'EOS',
+                          'eos-evm': 'EOS EVM',
+                          'ethereum': 'Ethereum',
+                          'ethereumpow': 'EthereumPoW',
+                          'everscale': 'Everscale',
+                          'evmos': 'Evmos',
+                          'fantom': 'Fantom',
+                          'fuse': 'Fuse',
+                          'fusion-network': 'Fusion',
+                          'harmony-shard-0': 'Harmony',
+                          'hedera-hashgraph': 'Hedera',
+                          'hoo': 'Hoo',
+                          'injective': 'Injective',
+                          'iotex': 'IoTeX',
+                          'kava': 'Kava',
+                          'kucoin-community-chain': 'Kucoin',
+                          'kujira': 'Kujira',
+                          'kusama': 'Kusama',
+                          'linea': 'Linea',
+                          'manta-pacific': 'Manta',
+                          'mantle': 'Mantle',
+                          'meter': 'Meter',
+                          'metis-andromeda': 'Metis',
+                          'milkomeda-cardano': 'Milkomeda',
+                          'moonbeam': 'Moonbeam',
+                          'moonriver': 'Moonriver',
+                          'near-protocol': 'Near',
+                          'neo': 'NEO',
+                          'nuls': 'Nuls',
+                          'oasis': 'Oasis',
+                          'ontology': 'Ontology',
+                          'optimistic-ethereum': 'Optimism',
+                          'osmosis': 'Osmosis',
+                          'polkadot': 'Polkadot',
+                          'polygon-pos': 'Polygon',
+                          'polygon-zkevm': 'Polygon zkEVM',
+                          'rollux': 'Rollux',
+                          'ronin': 'Ronin',
+                          'scroll': 'Scroll',
+                          'secret': 'Secret',
+                          'smartbch': 'smartBCH',
+                          'solana': 'Solana',
+                          'sui': 'Sui',
+                          'syscoin': 'Syscoin',
+                          'telos': 'Telos',
+                          'terra': 'Terra',
+                          'tezos': 'Tezos',
+                          'theta': 'Theta',
+                          'thorchain': 'Thorchain',
+                          'thundercore': 'ThunderCore',
+                          'tomochain': 'TomoChain',
+                          'tron': 'Tron',
+                          'velas': 'Velas',
+                          'wanchain': 'Wanchain',
+                          'waves': 'Waves',
+                          'xdai': 'xDai',
+                          'xdc-network': 'XDC',
+                          'zilliqa': 'Zilliqa',
+                          'zksync': 'zkSync Era'})
+
     def __init__(self):
         super().__init__()
-        filename = os.path.join(os.sep, os.getcwd(), 'data', 'coingecko_address_map.csv')
+        filename = os.path.join(os.sep, os.getcwd(), 'config', 'coingecko_address_map.csv')
         if not os.path.isfile(filename):
             ids = self.get_coins_list(include_platform='true')
             address_map = pd.concat([pd.Series(x['platforms']
@@ -66,11 +154,18 @@ class myCoinGeckoAPI(pycoingecko.CoinGeckoAPI):
                                                   'symbol': x['symbol'],
                                                   'name': x['name']})
                                      for x in ids], axis=1).T
-            address_map.columns = address_map.columns.map(lambda x: x.lower())
-            self.address_map = address_map.fillna('').applymap(lambda x: x.lower())
-            address_map.to_csv(filename)
+            address_map.columns = address_map.columns
+            self.address_map = address_map.fillna('').set_index('id')
+            self.address_map.to_csv(filename)
         else:
-            self.address_map = pd.read_csv(filename)
+            self.address_map = pd.read_csv(filename, index_col='id')
+
+    def adapt_address_map_to_defillama(self) -> None:
+        # keep only columns that are in the chain mapping
+        table = self.address_map.filter(myCoinGeckoAPI.defillama_mapping.keys())
+        # rename columns to defillama chain names
+        table.columns = [myCoinGeckoAPI.defillama_mapping[chain] for chain in table.columns]
+        self.address_map = table
 
     def address_to_id(self, address: str, chain: str) -> str:
         '''
@@ -78,7 +173,7 @@ class myCoinGeckoAPI(pycoingecko.CoinGeckoAPI):
         :return: coingecko id
         '''
         try:
-            chain = myCoinGeckoAPI.chain_mapping[chain.lower()]
+            chain = myCoinGeckoAPI.defillama_mapping[chain]
             return self.address_map.loc[self.address_map[chain] == address.lower(), 'id'].squeeze()
         except:
             return None
@@ -91,8 +186,8 @@ class myCoinGeckoAPI(pycoingecko.CoinGeckoAPI):
         :return: df with columns: timestamp, open, high, low, close, volume
         '''
         df = pd.DataFrame(self.get_coin_market_chart_range_by_id(id=symbol, vs_currency='usd',
-                                                               from_timestamp=start.timestamp(),
-                                                               to_timestamp=end.timestamp()),
+                                                                 from_timestamp=start.timestamp(),
+                                                                 to_timestamp=end.timestamp()),
                           columns=['timestamp', 'open', 'high', 'low', 'close'])
         df['timestamp'] = df['timestamp'].apply(lambda x: datetime.fromtimestamp(x / 1000).replace(tzinfo=timezone.utc))
         return df
