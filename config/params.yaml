@@ -1,10 +1,19 @@
 input_data:
   ResearchName: defillama
   dirpath:
-  - data
-  - DynYieldA
-  selected_instruments: all # this comes from top n ever
-  start_date: '2022-09-15T00:00:00'
+    - data
+    - latest
+  selected_instruments: all
+  pool_selector:
+    reference_asset: usd
+    chains:
+      - Ethereum
+      - Arbitrum
+      - Optimism
+    oracle: coingecko
+    protocol_tvl_threshold: 10e7
+    pool_tvl_threshold: 10e6
+    use_oracle: false
 run_parameters:
   normalize: false
   cross_ewma: false
