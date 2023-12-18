@@ -18,7 +18,7 @@ class VaultBacktestEngine:
         self.performance = performance[(performance.index >= self.start_date) & (performance.index <= self.end_date)]
 
     @staticmethod
-    def run(parameters: dict) -> tuple[dict, pd.DataFrame, pd.Series]:
+    def run(parameters: dict) -> pd.DataFrame:
         '''
         Runs a backtest on one instrument.
         '''
@@ -47,14 +47,20 @@ class VaultBacktestEngine:
     @staticmethod
     def run_grid(parameter_grid: dict, parameters: dict) -> pd.DataFrame:
         # data
-        perf_list: list[pd.Series] = list()
+        run_name = 'latest'
+        dirname = os.path.join(os.sep, os.getcwd(), "logs", run_name)
+        if not os.path.isdir(dirname):
+            os.mkdir(dirname)
+
+        perf_list: list[pd.Series] = []
         for cur_params_override in dict_list_to_combinations(parameter_grid):
-            # skip run if already in directory
             name = pd.Series(cur_params_override)
-            name_to_str = ''.join(['{}_'.format(str(elem)) for elem in name]) + '_backtest.csv'
-            vault_name = parameters['input_data']['dirpath'][-1].lower()
-            filename = os.path.join(os.sep, os.getcwd(), "logs", vault_name, name_to_str)
-            if os.path.isfile(filename) and parameters['run_parameters']['use_cache']:
+            name_to_str = ''.join([f'{str(elem)}_' for elem in name]) + '_backtest.csv'
+
+            filename = os.path.join(os.sep, dirname, name_to_str)
+
+            # TODO: disabling cache for now
+            if False: #os.path.isfile(filename) and parameters['run_parameters']['use_cache']:
                 logging.getLogger('defillama').warning(f'{filename} already run - delete it to rerun')
                 result = pd.read_csv(filename, index_col=0, header=[0, 1], parse_dates=True)
                 perf = VaultBacktestEngine.perf_analysis(result)

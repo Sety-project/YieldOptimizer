@@ -11,7 +11,7 @@ import pickle
 import yaml
 from plotly.subplots import make_subplots
 
-from scrappers.defillama_history.defillama import fetch_defillama, FilteredDefiLlama, DiscoveryDefiLlama
+from scrappers.defillama_history.defillama import FilteredDefiLlama, DiscoveryDefiLlama
 from research.research_engine import build_ResearchEngine, model_analysis
 from strategies.vault_backtest import VaultBacktestEngine
 from strategies.cta_betsizing import SingleAssetStrategy
@@ -20,6 +20,8 @@ from utils.api_utils import extract_args_kwargs
 
 import streamlit as st
 import plotly.express as px
+
+from scrappers.defillama_history.coingecko import myCoinGeckoAPI
 
 def plot_perf(backtest: pd.DataFrame, base_buffer: float) -> None:
     # plot results
@@ -42,6 +44,8 @@ def plot_perf(backtest: pd.DataFrame, base_buffer: float) -> None:
     subfig.layout.yaxis.title = "apy"
     subfig.layout.yaxis.range = [0, 30]
     subfig.layout.yaxis2.title = "tx_cost"
+    subfig.layout.height = 1000
+    subfig.layout.width = 2000
 
     # recoloring is necessary otherwise lines from fig und fig2 would share each color
     # e.g. Linear-, Log- = blue; Linear+, Log+ = red... we don't want this
@@ -51,73 +55,100 @@ def plot_perf(backtest: pd.DataFrame, base_buffer: float) -> None:
     st.write(f'max apy mean = {max_apy.mean()}')
 
 
-st.title('Yield optimizer backtest, by sety-project.eth')
+def human_format(num):
+    num = float('{:.3g}'.format(num))
+    magnitude = 0
+    while abs(num) >= 1000:
+        magnitude += 1
+        num /= 1000.0
+    return '{}{}'.format('{:f}'.format(num).rstrip('0').rstrip('.'), ['', 'K', 'M', 'B', 'T'][magnitude])
+
+
+st.title('Yield optimizer backtest \n by sety-project.eth', help='0xFaf2A8b5fa78cA2786cEf5F7e19f6942EC7cB531')
+coingecko = myCoinGeckoAPI()
+coingecko.adapt_address_map_to_defillama()
 
 # load whitelisted protocols from yaml
-with open(os.path.join(os.sep, os.getcwd(), "config", f'whitelist.yaml'), 'r') as fp:
-    whitelist = yaml.safe_load(fp)
-config = {
-    'protocols': whitelist['protocols'],
-    'oracle':
-    st.selectbox("oracle", options=['none', 'coingecko'], help="this is for depeg snipping. Please use none for now", disabled=True),
-}
+with st.form("initialize"):
+    # instantiate defillama API
+    use_oracle = st.selectbox("use_oracle", options=[False, True], help="this is for depeg snipping. Please use none for now",
+                 disabled=True)
+    reference_asset = st.selectbox("reference_asset", options=['usd', 'eth', 'btc'], help="What asset you are investing")
 
-with st.form("data"):
-    # ask vault name
-    vault_name = st.selectbox("vault name",
-                              options=[child.__name__ for child in FilteredDefiLlama.__subclasses__() if child is not DiscoveryDefiLlama])
+    top_chains = coingecko.address_map.count().sort_values(ascending=False)[2:23].index
+    chains = st.multiselect("chains", options=top_chains, default=['Ethereum'], help="select chains to include in universe")
 
-    if submitted := st.form_submit_button("Fetch data"):
-        with st.spinner('Fetching data...'):
-            all_history = fetch_defillama(vault_name,
-                                          config=config,
-                                          dirname=os.path.join(os.sep, os.getcwd(), 'data', vault_name))
+    tvl_threshold = np.power(10, st.slider("protocol tvl threshold (log10)", min_value=0.5, value=7., max_value=10.,
+                                           step=0.1, help="log10 of the minimum tvl to include in universe"))
+    st.write(f'protocol tvl threshold = {human_format(tvl_threshold)}')
+    tvlUsd_floor = np.power(10,
+                            st.slider("pool tvl threshold (log10)", min_value=0.5, value=6., max_value=10., step=0.1,
+                                      help="log10 of minimum tvl to include in universe"))
+    st.write(f'pool tvl threshold = {human_format(tvlUsd_floor)}')
+    if submitted := st.form_submit_button("Find pools"):
+        st.session_state.defillama = FilteredDefiLlama(reference_asset=reference_asset,
+                                                       chains=chains,
+                                                       oracle=coingecko,
+                                                       protocol_tvl_threshold=tvl_threshold,
+                                                       pool_tvl_threshold=tvlUsd_floor,
+                                                       use_oracle=use_oracle)
+        st.write(f'found {len(st.session_state.defillama.pools)} pools on {len(st.session_state.defillama.protocols)} protocols')
+        st.session_state.initialized = True
 
+if 'initialized' in st.session_state:
+    with st.form("data"):
+        if submitted := st.form_submit_button("Fetch data"):
+            with st.spinner('Fetching data...'):
+                all_history = st.session_state.defillama.all_apy_history(dirname=os.path.join(os.sep, os.getcwd(), 'data', 'latest'))
+                st.session_state.data_done = True
 
-with (st.form("backtest")):
-    st.write("backtest parameters")
-    # load default parameters from yaml
-    with open(os.path.join(os.sep, os.getcwd(), "config", f'{vault_name.lower()}.yaml'), 'r') as fp:
-        parameters = yaml.safe_load(fp)
+if 'data_done' in st.session_state:
+    with st.form("Run backtest"):
+        # load default parameters from yaml
+        with open(os.path.join(os.sep, os.getcwd(), "config", 'params.yaml'), 'r') as fp:
+            parameters = yaml.safe_load(fp)
 
-    override_grid = {'strategy.initial_wealth': [np.power(10,
-        st.slider('initial wealth log(10)', value=6., min_value=2., max_value=8., step=0.1, help="log(10) of initial wealth")
-    )],
-        'run_parameters.models.apy.TrivialEwmPredictor.params.cap': [3],
-        'run_parameters.models.apy.TrivialEwmPredictor.params.halflife': ['{}d'.format(
-            st.slider('predictor halflife', value=10, min_value=1, max_value=365,
-                      help="in days; longer means slower to adapt to new data"))],
-        'strategy.cost':
-            [st.slider('slippage', value=5, min_value=0, max_value=100, help="in bps") / 10000],
-        'strategy.gas':
-            [st.slider('gas', value=50, min_value=0, max_value=200, help="avg cost of tx in USD")],
-        'strategy.base_buffer':
-            [st.slider('liquidity buffer', value=10, min_value=0, max_value=25, help="idle capital to keep as buffer, in %") / 100],
-        "run_parameters.models.apy.TrivialEwmPredictor.params.horizon": ["99y"],
-        "label_map.apy.horizons": [[
-            st.slider('invest horizon', value=30, min_value=1, max_value=90,
-                      help="assumed holding period of investment, in days. This is only used to convert fixed costs in apy inside optimizers")
-        ]],
-        "strategy.concentration_limit":
-            [st.slider('concentration limit', value=40, min_value=10, max_value=100,
-                      help="max allocation into a single pool, in %") / 100]
-    }
-    end_date = st.date_input("backtest end", value=date.today())
-    start_date = st.date_input("backtest start", value=end_date - timedelta(days=365))
-    parameters['backtest']['end_date'] = end_date.isoformat()
-    parameters['backtest']['start_date'] = start_date.isoformat()
+        override_grid = {'strategy.initial_wealth': [np.power(10,
+                                                              st.slider('initial wealth log(10)', value=6., min_value=2., max_value=8., step=0.1, help="log(10) of initial wealth")
+                                                              )],
+                         'run_parameters.models.apy.TrivialEwmPredictor.params.cap': [3],
+                         'run_parameters.models.apy.TrivialEwmPredictor.params.halflife': ['{}d'.format(
+                             st.slider('predictor halflife', value=10, min_value=1, max_value=365,
+                                       help="in days; longer means slower to adapt to new data"))],
+                         'strategy.cost':
+                             [st.slider('slippage', value=5, min_value=0, max_value=100, help="in bps") / 10000],
+                         'strategy.gas':
+                             [st.slider('gas', value=50, min_value=0, max_value=200, help="avg cost of tx in USD")],
+                         'strategy.base_buffer':
+                             [st.slider('liquidity buffer', value=10, min_value=0, max_value=25, help="idle capital to keep as buffer, in %") / 100],
+                         "run_parameters.models.apy.TrivialEwmPredictor.params.horizon": ["99y"],
+                         "label_map.apy.horizons": [[
+                             st.slider('invest horizon', value=30, min_value=1, max_value=90,
+                                       help="assumed holding period of investment, in days. This is only used to convert fixed costs in apy inside optimizers")
+                         ]],
+                         "strategy.concentration_limit":
+                             [st.slider('concentration limit', value=40, min_value=10, max_value=100,
+                                        help="max allocation into a single pool, in %") / 100]
+                         }
+        st.write('initial_wealth = {}'.format(human_format(override_grid['strategy.initial_wealth'][0])))
+        end_date = st.date_input("backtest end", value=date.today())
+        start_date = st.date_input("backtest start", value=end_date - timedelta(days=365))
 
-    if submitted := st.form_submit_button("Run backtest"):
-        with st.spinner('Running backtest...'):
-            result = VaultBacktestEngine.run_grid(override_grid, parameters)
+        if submitted := st.form_submit_button("Run backtest"):
+            parameters['backtest']['end_date'] = end_date.isoformat()
+            parameters['backtest']['start_date'] = start_date.isoformat()
+            with st.spinner('Running backtest...'):
+                result = VaultBacktestEngine.run_grid(override_grid, parameters)
+                st.session_state.backtest_done = True
 
-        filename = "{}/logs/{}/{}__backtest.csv".format(os.getcwd(), vault_name.lower(),
-                                                                                '_'.join([str(x[0]) for x in override_grid.values()]))
-        backtest = pd.read_csv(filename, header=[0, 1], index_col=0)
+if 'backtest_done' in st.session_state:
+    filename = "{}/logs/{}/{}__backtest.csv".format(os.getcwd(), 'latest',
+                                                                            '_'.join([str(x[0]) for x in override_grid.values()]))
+    backtest = pd.read_csv(filename, header=[0, 1], index_col=0)
 
-        plot_perf(backtest, override_grid['strategy.base_buffer'][0])
-        st.plotly_chart(px.line(backtest['weights'], title='Weights'))
-        st.plotly_chart(px.line(backtest['apy'], title='apy'))
+    plot_perf(backtest, override_grid['strategy.base_buffer'][0])
+    st.plotly_chart(px.line(backtest['weights'], title='Weights', height=1000, width=2000))
+    st.plotly_chart(px.line(backtest['apy'], title='apy', height=1000, width=2000))
 
 
 
