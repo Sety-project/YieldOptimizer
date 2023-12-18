@@ -11,7 +11,7 @@ import pickle
 import yaml
 from plotly.subplots import make_subplots
 
-from scrappers.defillama_history.defillama import FilteredDefiLlama, DiscoveryDefiLlama
+from scrappers.defillama_history.defillama import FilteredDefiLlama
 from research.research_engine import build_ResearchEngine, model_analysis
 from strategies.vault_backtest import VaultBacktestEngine
 from strategies.cta_betsizing import SingleAssetStrategy

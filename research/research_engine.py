@@ -592,7 +592,7 @@ class DefillamaResearchEngine(ResearchEngine):
     execution_lag = 0
 
     @staticmethod
-    def read_data(dirpath, selected_instruments: list[Instrument], start_date) -> FileData:
+    def read_data(dirpath, selected_instruments: list[Instrument], start_date, **kwargs) -> FileData:
         file_data: FileData = FileData(dict())
         start_date = dateutil.parser.isoparse(start_date).replace(tzinfo=timezone.utc)
         # Made path relative to project root directory instead of absolute one.
