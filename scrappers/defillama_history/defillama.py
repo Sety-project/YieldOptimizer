@@ -178,6 +178,7 @@ class FilteredDefiLlama(DefiLlama):
                                'il': il,
                                'tvl': tvl}
         if metadata['underlyingTokens'] is None and hasattr(self, 'oracle'):
+            assert len(metadata['underlyingTokens']) < 7, 'limited to 6 underlyings for now'
             res_dict |= {f'underlying{i}': pool_history[f'underlying{i}']
                          for i, _ in enumerate(metadata['underlyingTokens'])}
         result = pd.DataFrame(res_dict)

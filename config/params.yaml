@@ -28,16 +28,15 @@ run_parameters:
   use_cache: false
   unit_test: false
 feature_map: # each feature present here will be transformed. times are in days.
-  apy:
-    as_is:
-  tvl:
-    as_is:
-  underlying1:
-    as_is:
-  underlying2:
-    as_is:
-  underlying3:
-    as_is:
+  tvl: as_is
+  apy: as_is
+  apyReward: as_is
+  underlying1: as_is
+  underlying2: as_is
+  underlying3: as_is
+  underlying4: as_is
+  underlying5: as_is
+  underlying6: as_is
 label_map:
   apy:
     horizons: # only first is used for now
