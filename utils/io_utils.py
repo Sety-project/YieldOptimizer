@@ -95,22 +95,22 @@ def profile(filename):
     return decorator
 
 
-def check_password():
-    if hmac.compare_digest(st.session_state.password, st.secrets.password):
-        st.session_state.status = "verified"
+def check_whitelist():
+    if st.session_state.login in st.secrets.whitelist:
+        st.session_state.authentification = "verified"
     else:
-        st.session_state.status = "incorrect"
+        st.session_state.authentification = "incorrect"
     st.session_state.password = ""
 
 
 def login_prompt():
-    st.text_input("Enter password:", key="password", on_change=check_password)
-    if st.session_state.status == "incorrect":
+    st.text_input("Enter tg handle:", key="login", on_change=check_whitelist)
+    if st.session_state.authentification == "incorrect":
         st.warning("Incorrect password. Please try again.")
 
 
 def logout():
-    st.session_state.status = "unverified"
+    st.session_state.authentification = "unverified"
 
 
 def welcome():

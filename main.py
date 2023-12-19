@@ -29,8 +29,8 @@ st.title('Yield optimizer backtest \n by sety-project.eth', help='0xFaf2A8b5fa78
 '''
 authentification
 '''
-st.session_state.status = st.session_state.get("status", "unverified")
-if st.session_state.status != "verified":
+st.session_state.authentification = st.session_state.get("authentification", "unverified")
+if st.session_state.authentification != "verified":
     login_prompt()
     st.stop()
 welcome()
