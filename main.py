@@ -71,7 +71,7 @@ with initialize:
             meta_df['underlyingTokens'] = meta_df.apply(lambda meta: [coingecko.address_to_symbol(address, meta['chain'])
                                                                       for address in meta['underlyingTokens']] if meta['underlyingTokens'] else [],
                                                         axis=1)
-            meta_df['rewardTokens'] = meta_df.apply(lambda meta: [coingecko.address_to_symbol(address, meta['chain'])
+            meta_df['rewardTokens'] = meta_df.apply(lambda meta: [coingecko.address_to_symbol(address.lower(), meta['chain'])
                                                                       for address in meta['rewardTokens']] if meta['rewardTokens'] else [],
                                                         axis=1)
             st.dataframe(meta_df[['chain', 'project', 'underlyingTokens', 'tvlUsd', 'apy', 'apyBase', 'apyReward', 'rewardTokens', 'predictedClass', 'binnedConfidence']],
@@ -124,7 +124,7 @@ with backtest:
                              }
             st.write('initial_wealth = {}'.format(human_format(override_grid['strategy.initial_wealth'][0])))
             end_date = st.date_input("backtest end", value=date.today())
-            start_date = st.date_input("backtest start", value=end_date - timedelta(days=365))
+            start_date = st.date_input("backtest start", value=end_date - timedelta(days=90))
 
             if submitted := st.form_submit_button("Run backtest"):
                 parameters['backtest']['end_date'] = end_date.isoformat()
@@ -142,9 +142,23 @@ with analytics:
 
         height = 1000
         width = 1500
-        plot_perf(backtest, override_grid['strategy.base_buffer'][0], height=height, width=width)
-        st.plotly_chart(px.line(backtest['weights'], title='Weights', height=height, width=width))
-        st.plotly_chart(px.line(backtest['apy'], title='apy', height=height, width=width))
+
+        #plot_perf(backtest, override_grid['strategy.base_buffer'][0], height=height, width=width)
+        apy = (backtest['full_apy'] * backtest['weights'].divide(backtest['weights']['total'], axis=0)).drop(
+            columns='total').reset_index().melt(id_vars='index', var_name='pool', value_name='apy').dropna()
+        apy['apy'] = apy['apy'] * 100
+
+        avg_apy = (backtest['full_apy'] * backtest['weights'].divide(backtest['weights']['total'], axis=0)).mean()*100
+        avg_apy = avg_apy.drop(index='total').rename('apy_pc').reset_index().dropna()
+        st.plotly_chart(px.pie(avg_apy, names='index', values='apy_pc', title='apy * weights (total apy was {}_'.format(int(avg_apy['apy_pc'].sum()), height=height, width=width)))
+        st.plotly_chart(px.bar(apy, x='index', y='apy', color='pool', title='apy', height=height, width=width))
+
+        long_weights = backtest['weights'].drop(columns='total').reset_index().melt(id_vars='index', var_name='pool',
+                                                                                    value_name='weights').dropna()
+        st.plotly_chart(px.bar(long_weights, x='index', y='weights', color='pool', title='Allocations', height=height, width=width))
+
+        dilutor = 100*(1 - backtest['dilutor'].drop(columns='total').dropna())
+        st.plotly_chart(px.line(dilutor, title='pct of tvl', height=height, width=width))
 
 if __name__ == "2__main__":
     args, kwargs = extract_args_kwargs(sys.argv)
