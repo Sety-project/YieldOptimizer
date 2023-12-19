@@ -216,9 +216,12 @@ class ResearchEngine:
         result: Data = Data(dict())
         for (instrument, raw_feature), data in data_dict.items():
             # add several ewma, volume_weighted if requested
-            for method, params in self.feature_map[raw_feature].items():
-                if hasattr(self, method):
-                    getattr(self, method)(data_dict, instrument, raw_feature, result, params)
+            if type(self.feature_map[raw_feature]) == dict:
+                for method, params in self.feature_map[raw_feature].items():
+                    if hasattr(self, method):
+                        getattr(self, method)(data_dict, instrument, raw_feature, result, params)
+            else:
+                getattr(self, 'as_is')(data_dict, instrument, raw_feature, result, {})
         return result
 
     def as_is(self, data_dict, instrument, raw_feature, result, params) -> None:
