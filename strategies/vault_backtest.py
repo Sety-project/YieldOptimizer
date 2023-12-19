@@ -82,8 +82,8 @@ class VaultBacktestEngine:
         weights = {f'weight_{i}': weight
                    for i, weight in enumerate(prev_state.weights)}
         weights = pd.Series(weights)
-        full_apy = pd.concat(rebalancing_strategy.research_engine.performance, axis=1)
-        apy = rebalancing_strategy.research_engine.Y
+        apy = rebalancing_strategy.research_engine.X.xs(key=['apy', 'as_is'], axis=1, level=['feature', 'window'])
+        apyReward = rebalancing_strategy.research_engine.X.xs(key=['apyReward', 'as_is'], axis=1, level=['feature', 'window'])
 
         # yields = {f'apy_{i}': perf
         #           for i, perf in enumerate(apy.loc[index].values)}
@@ -93,15 +93,15 @@ class VaultBacktestEngine:
         #                for i, predicted_apy in enumerate(predicted_apys)}
         temp = dict()
         temp['weights'] = weights.values
-        temp['apy'] = apy.loc[index].values
         temp['pred_apy'] = predicted_apys
-        temp['full_apy'] = full_apy.loc[index].values
+        temp['apy'] = apy.loc[index].values
+        temp['apyReward'] = apyReward.loc[index].values
         temp['dilutor'] = step_results['dilutor']
 
         temp = pd.DataFrame(temp).fillna(0.0)
         temp.index = self.performance.columns
 
-        for col in ['full_apy', 'apy', 'pred_apy']:
+        for col in ['apy', 'apyReward', 'pred_apy']:
             temp.loc['total', col] = (temp[col] * temp['weights']).sum() / temp['weights'].apply(lambda x: np.clip(x, a_min= 1e-8, a_max=None)).sum()
         temp.loc['total', 'weights'] = prev_state.wealth - weights.sum()
 
