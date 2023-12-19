@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
+import asyncio
 import hmac
+import html
+import os
+
 import streamlit as st
 from plotly import express as px
 from plotly.subplots import make_subplots
@@ -14,7 +18,8 @@ import json
 import pandas as pd
 import numpy as np
 import collections
-import time
+from telegram import Bot
+import datetime
 # this is for jupyter
 # import cufflinks as cf
 # cf.go_offline()
@@ -96,27 +101,23 @@ def profile(filename):
 
 
 def check_whitelist():
-    if st.session_state.login in st.secrets.whitelist:
+    async def chat():
+        async with bot:
+            print(st.session_state.user_tg_handle)
+            await bot.send_message(chat_id=st.session_state.user_tg_handle, text='wassup?')
+            print(chat_id)
+            await bot.send_message(chat_id=chat_id, text=f'{st.session_state.user_tg_handle} logged in at {datetime.datetime.now()}')
+
+    if st.session_state.user_tg_handle in st.secrets.whitelist:
         st.session_state.authentification = "verified"
+
+        # bot = Bot(token=st.secrets.get('bot_token'))  # Replace 'YOUR_BOT_TOKEN' with your bot's token
+        # chat_id = st.secrets.get('chat_id')  # Replace 'YOUR_CHAT_ID' with the desired chat ID
+        # asyncio.run(chat())
     else:
         st.session_state.authentification = "incorrect"
+        st.warning(html.unescape('chat {} to get access'.format('https://t.me/daviddarr')))
     st.session_state.password = ""
-
-
-def login_prompt():
-    st.text_input("Enter tg handle:", key="login", on_change=check_whitelist)
-    if st.session_state.authentification == "incorrect":
-        st.warning("Incorrect password. Please try again.")
-
-
-def logout():
-    st.session_state.authentification = "unverified"
-
-
-def welcome():
-    st.success("Login successful.")
-    st.button("Log out", on_click=logout)
-
 
 def plot_perf(backtest: pd.DataFrame, base_buffer: float, height: int=1000, width: int=1500) -> None:
     # plot results
