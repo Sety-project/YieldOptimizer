@@ -168,15 +168,10 @@ class myCoinGeckoAPI(pycoingecko.CoinGeckoAPI):
         self.address_map = table
 
     def address_to_id(self, address: str, chain: str) -> str:
-        '''
-        :param address: coin address
-        :return: coingecko id
-        '''
-        try:
-            chain = myCoinGeckoAPI.defillama_mapping[chain]
-            return self.address_map.loc[self.address_map[chain] == address.lower(), 'id'].squeeze()
-        except:
-            return None
+        return self.address_map[self.address_map[chain] == address].index[0]
+
+    def address_to_symbol(self, address: str, chain: str) -> str:
+        return self.address_map.loc[self.address_map[chain] == address, 'symbol'].squeeze()
 
     def fetch_range(self, symbol: str, start: datetime, end: datetime) -> pd.DataFrame:
         '''

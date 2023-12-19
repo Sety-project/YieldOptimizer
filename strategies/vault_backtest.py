@@ -4,6 +4,9 @@ from datetime import timedelta
 import numpy as np
 import pandas as pd
 from copy import deepcopy
+
+from streamlit.delta_generator import DeltaGenerator
+
 from utils.io_utils import modify_target_with_argument, dict_list_to_combinations
 from research.research_engine import build_ResearchEngine, ResearchEngine
 from strategies.vault_betsizing import YieldStrategy
@@ -18,7 +21,7 @@ class VaultBacktestEngine:
         self.performance = performance[(performance.index >= self.start_date) & (performance.index <= self.end_date)]
 
     @staticmethod
-    def run(parameters: dict) -> pd.DataFrame:
+    def run(parameters: dict, progress_bar: DeltaGenerator) -> pd.DataFrame:
         '''
         Runs a backtest on one instrument.
         '''
@@ -30,7 +33,7 @@ class VaultBacktestEngine:
 
         result = pd.DataFrame()
         prev_index = backtest.performance.index[0]
-        for index, cur_performance in backtest.performance.iterrows():
+        for i, (index, cur_performance) in enumerate(backtest.performance.iterrows()):
             prev_state = deepcopy(rebalancing_strategy.state)
 
             predicted_apys, tvl = rebalancing_strategy.predict(index)
@@ -41,11 +44,12 @@ class VaultBacktestEngine:
 
             new_entry = backtest.record_result(index, predicted_apys, prev_state, rebalancing_strategy, step_results)
             result = pd.concat([result, new_entry.to_frame().T], axis=0)
+            progress_bar.progress(value=i / len(backtest.performance), text=f'Backtesting {index}')
 
         return result
 
     @staticmethod
-    def run_grid(parameter_grid: dict, parameters: dict) -> pd.DataFrame:
+    def run_grid(parameter_grid: dict, parameters: dict, progress_bar: DeltaGenerator) -> pd.DataFrame:
         # data
         run_name = 'latest'
         dirname = os.path.join(os.sep, os.getcwd(), "logs", run_name)
@@ -66,7 +70,7 @@ class VaultBacktestEngine:
                 perf = VaultBacktestEngine.perf_analysis(result)
             else:
                 cur_params = modify_target_with_argument(parameters, cur_params_override)
-                result = VaultBacktestEngine.run(cur_params)
+                result = VaultBacktestEngine.run(cur_params, progress_bar)
                 perf = VaultBacktestEngine.perf_analysis(result)
                 result.to_csv(os.path.join(filename))
 

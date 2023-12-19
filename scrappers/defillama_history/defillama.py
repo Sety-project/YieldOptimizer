@@ -13,7 +13,7 @@ import yaml
 
 from scrappers.defillama_history.coingecko import myCoinGeckoAPI
 from utils.async_utils import safe_gather
-from streamlit import cache_data
+import streamlit as st
 
 try:
     from utils.async_utils import async_wrap, safe_gather
@@ -152,6 +152,8 @@ class FilteredDefiLlama(DefiLlama):
         pool_history = await async_wrap(self.get_pool_hist_apy)(metadata['pool'])
         if self.use_oracle:
             pool_history = await self.fetch_oracle(metadata, pool_history)
+        if 'status' in kwargs:
+            kwargs['status'].update(label=metadata['name'], state="running", expanded=True)
 
         apy = pool_history['apy']
         apyReward = pool_history['apyReward']

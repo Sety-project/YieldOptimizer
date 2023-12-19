@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+import hmac
+import streamlit as st
+from plotly import express as px
+from plotly.subplots import make_subplots
+
 from utils.async_utils import async_wrap
 import functools
 from copy import deepcopy
@@ -89,3 +94,66 @@ def profile(filename):
         return wrapper
     return decorator
 
+
+def check_password():
+    if hmac.compare_digest(st.session_state.password, st.secrets.password):
+        st.session_state.status = "verified"
+    else:
+        st.session_state.status = "incorrect"
+    st.session_state.password = ""
+
+
+def login_prompt():
+    st.text_input("Enter password:", key="password", on_change=check_password)
+    if st.session_state.status == "incorrect":
+        st.warning("Incorrect password. Please try again.")
+
+
+def logout():
+    st.session_state.status = "unverified"
+
+
+def welcome():
+    st.success("Login successful.")
+    st.button("Log out", on_click=logout)
+
+
+def plot_perf(backtest: pd.DataFrame, base_buffer: float, height: int=1000, width: int=1500) -> None:
+    # plot results
+    backtest['pnl']["tx_cost"].iloc[0] = 0.001
+    cum_tx_cost = backtest['pnl']["tx_cost"].cumsum()
+    apy = (backtest['pnl']['wealth'] / backtest['pnl']['wealth'].shift(1) - 1) * 365 / 1 * 100
+    max_apy = backtest['full_apy'].max(axis=1) * 100 * (1 - base_buffer)
+    max_apy.name = 'max_apy'
+
+    subfig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    # create two independent figures with px.line each containing data from multiple columns
+    fig = px.line(apy, render_mode="webgl", )
+    fig3 = px.line(max_apy, render_mode="webgl")
+    fig3.update_traces(line={"dash": 'dot'})
+    fig2 = px.line(cum_tx_cost, render_mode="webgl", )
+    fig2.update_traces(yaxis="y2")
+    subfig.add_traces(fig.data + fig2.data + fig3.data)
+    subfig.layout.xaxis.title = "time"
+    subfig.layout.yaxis.title = "apy"
+    subfig.layout.yaxis.range = [0, 30]
+    subfig.layout.yaxis2.title = "tx_cost"
+    subfig.layout.height = height
+    subfig.layout.width = width
+
+    # recoloring is necessary otherwise lines from fig und fig2 would share each color
+    # e.g. Linear-, Log- = blue; Linear+, Log+ = red... we don't want this
+    subfig.for_each_trace(lambda t: t.update(line=dict(color=t.marker.color)))
+    st.plotly_chart(subfig, use_container_width=True)
+    st.write(f'apy mean = {apy.mean()}')
+    st.write(f'max apy mean = {max_apy.mean()}')
+
+
+def human_format(num):
+    num = float('{:.3g}'.format(num))
+    magnitude = 0
+    while abs(num) >= 1000:
+        magnitude += 1
+        num /= 1000.0
+    return '{}{}'.format('{:f}'.format(num).rstrip('0').rstrip('.'), ['', 'K', 'M', 'B', 'T'][magnitude])
