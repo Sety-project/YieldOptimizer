@@ -82,7 +82,8 @@ with initialize:
         with st.form("data"):
             if submitted := st.form_submit_button("Fetch data"):
                 with st.status('Fetching data...', expanded=True) as status:
-                    shutil.rmtree(os.path.join(os.sep, os.getcwd(), 'data', 'latest'))
+                    if os.path.isdir(os.path.join(os.sep, os.getcwd(), 'data', 'latest')):
+                        shutil.rmtree(os.path.join(os.sep, os.getcwd(), 'data', 'latest'))
                     try:
                         all_history = st.session_state.defillama.all_apy_history(dirname=os.path.join(os.sep, os.getcwd(), 'data', 'latest'),
                                                                                  status=status)
