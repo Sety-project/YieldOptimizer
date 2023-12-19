@@ -171,7 +171,8 @@ class myCoinGeckoAPI(pycoingecko.CoinGeckoAPI):
         return self.address_map[self.address_map[chain] == address].index[0]
 
     def address_to_symbol(self, address: str, chain: str) -> str:
-        return self.address_map.loc[self.address_map[chain] == address, 'symbol'].squeeze()
+        temp = self.address_map.loc[self.address_map[chain] == address, 'symbol'].squeeze()
+        return temp if type(temp) == str else ''
 
     def fetch_range(self, symbol: str, start: datetime, end: datetime) -> pd.DataFrame:
         '''
