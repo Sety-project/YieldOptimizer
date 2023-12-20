@@ -44,14 +44,19 @@ with initialize:
         reference_asset = st.selectbox("reference_asset", options=['usd', 'eth', 'btc'], help="What asset you are investing")
 
         top_chains = coingecko.address_map.count().sort_values(ascending=False)[2:23].index
-        chains = st.multiselect("chains", options=top_chains, default=['Arbitrum', 'Optimism', 'Polygon', 'Avalanche', 'Base'], help="select chains to include in universe")
+        chains = st.multiselect("chains", options=top_chains, default=['Arbitrum', 'Optimism', 'Polygon'], help="select chains to include in universe")
 
-        tvl_threshold = np.power(10, st.slider("protocol tvl threshold (log10)", min_value=0.5, value=6., max_value=10.,
-                                               step=0.1, help="log10 of the minimum tvl to include in universe"))
+        tvl_threshold = np.power(10, st.slider("protocol tvl threshold (log10)", min_value=0., value=6., max_value=10.,
+                                               step=0.25, help="log10 of the minimum tvl to include in universe"))
+        # eg merkle has no tvl
+        if tvl_threshold < 2:
+            tvl_threshold = -1.
         st.write(f'protocol tvl threshold = {human_format(tvl_threshold)}')
         tvlUsd_floor = np.power(10,
-                                st.slider("pool tvl threshold (log10)", min_value=0.5, value=5., max_value=10., step=0.1,
+                                st.slider("pool tvl threshold (log10)", min_value=0., value=5., max_value=10., step=0.25,
                                           help="log10 of minimum tvl to include in universe"))
+        if tvlUsd_floor < 2:
+            tvlUsd_floor = -1.
         st.write(f'pool tvl threshold = {human_format(tvlUsd_floor)}')
         if submitted := st.form_submit_button("Find pools"):
             st.session_state.defillama = FilteredDefiLlama(reference_asset=reference_asset,
@@ -148,9 +153,9 @@ with analytics:
         width = 1500
 
         #plot_perf(backtest, override_grid['strategy.base_buffer'][0], height=height, width=width)
-        apy = (backtest['apy'] * backtest['weights'].divide(backtest['weights']['total'], axis=0)).drop(
+        apy = (backtest['apy'] * backtest['weights'].divide(backtest['weights'].sum(axis=1), axis=0)).drop(
             columns='total').reset_index().melt(id_vars='index', var_name='pool', value_name='apy').dropna()
-        apyReward = (backtest['apyReward'] * backtest['weights'].divide(backtest['weights']['total'], axis=0)).drop(
+        apyReward = (backtest['apyReward'] * backtest['weights'].divide(backtest['weights'].sum(axis=1), axis=0)).drop(
             columns='total').reset_index().melt(id_vars='index', var_name='pool', value_name='apy').dropna()
         apyReward['pool'] = apyReward['pool'].apply(lambda x: f'reward_{x}')
         apy['apy'] = apy['apy'] - apyReward['apy']

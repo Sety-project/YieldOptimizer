@@ -92,7 +92,7 @@ class FilteredDefiLlama(DefiLlama):
         table = self.oracle.address_map.set_index('symbol')
         pegged_symbols = {'usd': ['usdt', 'usdc', 'dai', 'frax', 'lusd', 'mim', 'susd', 'fraxbp', 'mkusd'],
                              'eth': ['weth', 'eth', 'steth', 'wsteth', 'reth', 'reth2', 'frxeth', 'sfrxeth', 'sweth', 'cbeth', 'oeth'],
-                             'btc': ['renbtc', 'tbtc', 'hbtc', 'sbtc', 'obtc', 'wbtc', 'bbtc', 'pbtc', 'ebtc', 'ibtc']}
+                             'btc': ['wbtc']}
         # keep only symbols that are pegged
         return table.loc[table.index.isin(pegged_symbols[self.reference_asset]), self.chains].dropna()
 
@@ -100,42 +100,47 @@ class FilteredDefiLlama(DefiLlama):
                          tvl_threshold: float = None,
                          excluded_categories: list = None,
                          excluded_protocols: list = None) -> None:
+        # fetch
         protocols = self.get_protocols()
-        '''filter protocols'''
+
+        # normalize
         protocols['name'] = protocols['name'].apply(lambda s: s.lower().replace(' ', '-'))
-        protocol_filters = {
-            'chains': lambda x:  (self.chains is None) or any(y in self.chains for y in x),
-            'name': lambda x: (excluded_protocols is None) or (x not in excluded_protocols),
-            #   'audits': lambda x: x in ['1', '2', '3'],
-            'category': lambda x: (excluded_categories is None) or (x not in excluded_categories),
-            #    'listedAt': lambda x: not x>datetime(2023,3,1).timestamp()*1000, # 1mar23
-            'tvl': lambda x: (tvl_threshold is None) or (x > tvl_threshold),
-            #   'openSource': lambda x: not x == False,
-            #   'audited': lambda x: x in ['1','2','3'],
-            #    'wrongLiquidity': lambda x: x==True,
-            #    'rugged': lambda x: x==True,
-        }
-        return protocols[protocols.apply(lambda x: all(v(x[k]) for k, v in protocol_filters.items()), axis=1)]
+
+        # filter
+        if self.chains:
+            protocols = protocols[protocols['chains'].apply(lambda x: any(y in self.chains for y in x))]
+        if tvl_threshold:
+            protocols = protocols[(protocols['tvl'] >= tvl_threshold)|(protocols['name'] == 'merkl')]
+        if excluded_categories:
+            protocols = protocols[protocols['category'].isin(excluded_categories)]
+        if excluded_protocols:
+            protocols = protocols[protocols['name'].isin(excluded_protocols)]
+
+        return protocols
 
     @abstractmethod
     def filter_pools(self, **kwargs) -> None:
+        # fetch
         pools = self.get_pools_yields()
-        pool_filters = {
-            'chain': lambda x: x in self.chains,
-            'project': lambda x: x.lower() in self.protocols['name'].values,
-            'tvlUsd': lambda x: x > kwargs['tvlUsd_floor'],
-            'ilRisk': lambda x: not x == 'yes',
-            #    'exposure': lambda x: x in ['single', 'multi'], # ignore
-        }
-        pools = pools[pools.apply(lambda x: all(v(x[k]) for k, v in pool_filters.items()), axis=1)]
+
+        # normalize
+        pools['project'] = pools['project'].apply(lambda s: s.lower().replace(' ', '-'))
+        pools['underlyingTokens'] = pools['underlyingTokens'].apply(lambda s: [x.lower() for x in s] if s else None)
+        pools['rewardTokens'] = pools['rewardTokens'].apply(lambda s: [x.lower() for x in s] if s else None)
+        pools['name'] = pools.apply(lambda x: '_'.join([x[key]
+                                                        for key in ['chain', 'project', 'symbol', 'poolMeta']
+                                                        if x[key]]),
+                                    axis=1)
+
+        # filter
+        pools = pools[pools['chain'].isin(self.chains)]
+        pools = pools[pools['tvlUsd'] >= kwargs['tvlUsd_floor']]
+        pools = pools[pools['project'].isin(self.protocols['name'].values)]
         pools = pools[pools.apply(lambda x: all(y in self.shortlisted_tokens[x['chain']].values
                                                 for y in x['underlyingTokens'])
         if x['underlyingTokens'] is not None else False,
                                   axis=1)]
-        pools['name'] = pools.apply(lambda x: '_'.join([x[key]
-                                                                  for key in ['chain', 'project', 'symbol', 'poolMeta']
-                                                                  if x[key]]),
-                                              axis=1)
+
         return pools
 
     #@ignore_error
@@ -149,7 +154,12 @@ class FilteredDefiLlama(DefiLlama):
         ):
             return self.read_history(kwargs, metadata)
 
-        pool_history = await async_wrap(self.get_pool_hist_apy)(metadata['pool'])
+        try:
+            pool_history = await async_wrap(self.get_pool_hist_apy)(metadata['pool'])
+        except Exception as e:
+            self.logger.warning(f'{metadata["pool"]} {str(e)}')
+            kwargs['status'].update(label=str(e), state="error", expanded=True)
+            return pd.DataFrame()
         if self.use_oracle:
             pool_history = await self.fetch_oracle(metadata, pool_history)
         if 'status' in kwargs:
