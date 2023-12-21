@@ -159,6 +159,9 @@ def display_backtest_grid(grid):
     except Exception as e:
         st.write(str(e))
 
+st.session_state.user_tg_handle = st.sidebar.text_input("Enter your tg handle to backtest:")
+if st.session_state.authentification != "verified":
+    check_whitelist()
 
 initialize_tab, backtest_tab, analytics_tab, grid_tab, execution_tab = st.tabs(
     ["pool selection", "backtest", "backtest analytics", "grid analytics", "execution helper"])
@@ -296,13 +299,11 @@ with backtest_tab:
                         record['label_map.apy.horizons'] = eval(record['label_map.apy.horizons'])
 
             if st.form_submit_button("Run backtest") and ('override_grid' in st.session_state):
-                st.session_state.user_tg_handle = st.sidebar.text_input("Enter your tg handle to backtest:")
+
                 if 'uploaded_file' in st.session_state:
                     for key, value in st.session_state.override_grid[0].items():
                         st.sidebar.write(f'{key} = {value}')
 
-                if st.session_state.authentification != "verified":
-                    check_whitelist()
                 if st.session_state.authentification == 'verified':
                     progress_bar1 = st.progress(value=0.0, text='Running grid...')
                     progress_bar2 = st.progress(value=0.0, text='Running backtest...')
