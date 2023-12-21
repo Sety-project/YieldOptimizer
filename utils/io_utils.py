@@ -79,11 +79,22 @@ def modify_target_with_argument(target: dict, argument: dict) -> dict:
         cur[path[-1]] = value
     return result
 
-def dict_list_to_combinations(d: dict) -> list[pd.DataFrame]:
+
+def extract_from_paths(target: dict, paths: list) -> dict:
+    result = {}
+    for path in paths:
+        atoms = path.split('.')
+        cur = target
+        for p in atoms:
+            cur = cur[p]
+        result[path] = cur
+    return result
+
+
+def dict_list_to_combinations(d: dict) -> list[dict]:
     keys = d.keys()
     values = d.values()
-    combinations = [dict(zip(keys, combination)) for combination in product(*values)]
-    return combinations
+    return [dict(zip(keys, combination)) for combination in product(*values)]
 
 import time
 

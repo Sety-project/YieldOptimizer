@@ -158,12 +158,13 @@ class FilteredDefiLlama(DefiLlama):
             pool_history = await async_wrap(self.get_pool_hist_apy)(metadata['pool'])
         except Exception as e:
             self.logger.warning(f'{metadata["pool"]} {str(e)}')
-            kwargs['status'].update(label=str(e), state="error", expanded=True)
+            st.write(f'{metadata["name"]} -> {str(e)}')
+            kwargs['status'][metadata["name"]] = 'error'
             return pd.DataFrame()
         if self.use_oracle:
             pool_history = await self.fetch_oracle(metadata, pool_history)
         if 'status' in kwargs:
-            kwargs['status'].update(label=metadata['name'], state="running", expanded=True)
+            kwargs['status'][metadata["name"]] = 'success'
 
         apy = pool_history['apy']
         apyReward = pool_history['apyReward']
@@ -173,7 +174,7 @@ class FilteredDefiLlama(DefiLlama):
             token_addrs_n_chains = {rewardToken: metadata['chain'] for rewardToken in metadata['rewardTokens']}
             reward_discount = await self.discount_reward_by_minmax(token_addrs_n_chains, **kwargs)
             interpolated_discount = \
-                    reward_discount.reindex(apyReward.index.union(reward_discount.index)).interpolate().loc[apyReward.index]
+                        reward_discount.reindex(apyReward.index.union(reward_discount.index)).interpolate().loc[apyReward.index]
             apyReward = apyReward.interpolate(method='linear').fillna(0)
             haircut_apy = apy - (1 - interpolated_discount) * apyReward
 
@@ -268,7 +269,7 @@ class FilteredDefiLlama(DefiLlama):
                 filename = os.path.join(os.sep, os.getcwd(), 'data', f'{self.__class__.__name__}_pool_metadata.csv')
                 pd.DataFrame(metadata).set_index('pool').to_csv(filename, mode='w')
 
-            return {key['pool']: value for key, value in zip(metadata, data)}
+            return {key['name']: value for key, value in zip(metadata, data)}
 
 
 def compute_moments(apy: dict[str, pd.Series]) -> dict[str, pd.Series]:

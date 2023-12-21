@@ -21,7 +21,7 @@ class VaultBacktestEngine:
         self.performance = performance[(performance.index >= self.start_date) & (performance.index <= self.end_date)]
 
     @staticmethod
-    def run(parameters: dict, progress_bar: DeltaGenerator) -> pd.DataFrame:
+    def run(parameters: dict, progress_bar: DeltaGenerator = None) -> pd.DataFrame:
         '''
         Runs a backtest on one instrument.
         '''
@@ -44,39 +44,40 @@ class VaultBacktestEngine:
 
             new_entry = backtest.record_result(index, predicted_apys, prev_state, rebalancing_strategy, step_results)
             result = pd.concat([result, new_entry.to_frame().T], axis=0)
-            progress_bar.progress(value=i / len(backtest.performance), text=f'Backtesting {index}')
+            if progress_bar:
+                progress_bar.progress(value=(i+1) / len(backtest.performance), text=f'Backtesting {index}')
 
         return result
 
     @staticmethod
-    def run_grid(parameter_grid: dict, parameters: dict, progress_bar: DeltaGenerator) -> pd.DataFrame:
-        # data
+    def run_grid(parameter_grid: list[dict], parameters: dict, progress_bar1: DeltaGenerator = None, progress_bar2: DeltaGenerator = None) -> dict:
+        '''
+        returns:
+            - runs = dict of backtest results for each parameter_grid
+            - grid = performance metrics for all runs: perf, tx_cost, avg gini
+        '''
         run_name = 'latest'
         dirname = os.path.join(os.sep, os.getcwd(), "logs", run_name)
         if not os.path.isdir(dirname):
             os.mkdir(dirname)
 
-        perf_list: list[pd.Series] = []
-        for cur_params_override in dict_list_to_combinations(parameter_grid):
-            name = pd.Series(cur_params_override)
-            name_to_str = ''.join([f'{str(elem)}_' for elem in name]) + '_backtest.csv'
+        result: dict[str, pd.DataFrame] = {}
+        perf_list: list[pd.DataFrame] = []
+        for i, cur_params_override in enumerate(parameter_grid):
+            name_to_str = '_'.join([f'{str(elem)}' for elem in cur_params_override.values()])
 
-            filename = os.path.join(os.sep, dirname, name_to_str)
+            filename = os.path.join(os.sep, dirname, f'{name_to_str}_backtest.csv')
 
-            # TODO: disabling cache for now
-            if False: #os.path.isfile(filename) and parameters['run_parameters']['use_cache']:
-                logging.getLogger('defillama').warning(f'{filename} already run - delete it to rerun')
-                result = pd.read_csv(filename, index_col=0, header=[0, 1], parse_dates=True)
-                perf = VaultBacktestEngine.perf_analysis(result)
-            else:
-                cur_params = modify_target_with_argument(parameters, cur_params_override)
-                result = VaultBacktestEngine.run(cur_params, progress_bar)
-                perf = VaultBacktestEngine.perf_analysis(result)
-                result.to_csv(os.path.join(filename))
+            cur_params = modify_target_with_argument(parameters, cur_params_override)
+            result[name_to_str] = VaultBacktestEngine.run(cur_params, progress_bar2)
+            perf = VaultBacktestEngine.perf_analysis(result[name_to_str])
+            result[name_to_str].to_csv(os.path.join(filename))
 
-            perf_list.append(pd.concat([name, perf]))
+            perf_list.append(pd.concat([pd.Series(cur_params_override), perf]))
+            if progress_bar1:
+                progress_bar1.progress(value=(i+1) / len(parameter_grid), text=f'Run {i+1} out of {len(parameter_grid)}')
 
-        return pd.DataFrame(perf_list)
+        return {'grid': pd.DataFrame(perf_list), 'runs': result}
 
     def record_result(self, index, predicted_apys, prev_state, rebalancing_strategy, step_results) -> pd.Series:
         weights = {f'weight_{i}': weight
