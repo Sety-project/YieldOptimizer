@@ -1,0 +1,56 @@
+input_data:
+  database: aiven
+  pool_selector:
+    reference_asset: usd
+    chains:
+      - Ethereum
+      - Arbitrum
+      - Optimism
+    oracle: coingecko
+    protocol_tvl_threshold: 10e7
+    pool_tvl_threshold: 10e6
+    use_oracle: false
+run_parameters:
+  normalize: false
+  cross_ewma: false
+  groupby: false
+  models:
+    apy:
+      TrivialEwmPredictor:
+        params:
+          cap: 3 # stdev threshold of outlier yield
+          halflife: 7d # ewm window for prediction
+          horizon: 99y # horizon for depeg conversion to apy
+  use_cache: false
+  unit_test: false
+feature_map: # each feature present here will be transformed. times are in days.
+  tvl: as_is
+  apy: as_is
+  apyReward: as_is
+  underlying1: as_is
+  underlying2: as_is
+  underlying3: as_is
+  underlying4: as_is
+  underlying5: as_is
+  underlying6: as_is
+label_map:
+  apy:
+    horizons: # only first is used for now
+      - 28
+strategy:
+  cost: 0.0005 # 1e-4 is a bp
+  gas: 0 # in $
+  base_buffer: 0.1 # relative to wealth
+  concentration_limit: 0.7
+  initial_wealth: 1000000
+  solver_params:
+    solver: "ECOS"
+    verbose: false
+    warm_start: false
+    max_iters: 1000
+    abstol: 0.01
+    reltol: 0.01
+    feastol: 0.01
+backtest:
+  start_date: '2023-09-01T00:00:00'
+  end_date: '2023-12-01T00:00:00'
