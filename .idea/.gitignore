@@ -1,0 +1,7 @@
+# Default ignored files
+/shelf/
+/logs/
+/.venv/
+.idea
+*.xml
+./streamit/secrets.toml
