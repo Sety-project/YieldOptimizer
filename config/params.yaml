@@ -1,5 +1,5 @@
 input_data:
-  database: local
+  database: aiven
   pool_selector:
     reference_asset: usd
     chains:
