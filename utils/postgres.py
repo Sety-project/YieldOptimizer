@@ -62,7 +62,7 @@ class SqlApi:
         return self.read_sql_query(query, index_col='name', connection=connection)
 
     def write_metadata(self, data: pd.DataFrame, connection: Connection = None):
-        data.to_sql(name='metadata', con=connection or self.engine, if_exists='append', index=False, # TODO: replace with upsert
+        data.to_sql(name='metadata', con=connection or self.engine, if_exists='replace', index=False,
                                           dtype=self.schema)
         return "updated metadata"
 
