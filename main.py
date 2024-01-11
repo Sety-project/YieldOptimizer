@@ -67,15 +67,32 @@ parameter_keys = ['strategy.initial_wealth',
                   "strategy.concentration_limit",
                   "backtest.end_date",
                   "backtest.start_date"]
-my_categories = ['Liquid Staking', 'Bridge', 'Lending', 'CDP', 'Dexes', 'RWA', 'Yield', 'Farm', 'Synthetics',
-                 'Staking Pool', 'Derivatives', 'Yield Aggregator', 'Insurance', 'Liquidity manager', 'Algo-Stables',
-                 'Decentralized Stablecoin', 'NFT Lending', 'Leveraged Farming']
 
 initialize_tab, backtest_tab, analytics_tab, grid_tab, execution_tab = st.tabs(
     ["pool selection", "backtest", "backtest analytics", "grid analytics", "execution helper"])
 
+def prompt_initialization():
+    def reset():
+        st.session_state.stage = 0
+    use_oracle = st.selectbox("use_oracle", options=[False, True],
+                              help="this is for depeg snipping. Please use none for now",
+                              disabled=True, on_change=reset)
+    reference_asset = st.selectbox("reference_asset", options=['usd', 'eth', 'btc'],
+                                   help="What asset you are investing", on_change=reset)
+    top_chains = coingecko.address_map.count().sort_values(ascending=False)[2:23].index
+    chains = st.multiselect("chains", options=top_chains, default=['Arbitrum', 'Optimism', 'Ethereum'],
+                            help="select chains to include in universe", on_change=reset)
 
-def prompt_protocol_filtering(all_categories) -> dict:
+    return use_oracle, reference_asset, chains
+
+def prompt_protocol_filtering(all_categories,
+                              my_categories=['Liquid Staking', 'Bridge', 'Lending', 'CDP', 'Dexes', 'RWA', 'Yield',
+                                             'Farm', 'Synthetics',
+                                             'Staking Pool', 'Derivatives', 'Yield Aggregator', 'Insurance',
+                                             'Liquidity manager', 'Algo-Stables',
+                                             'Decentralized Stablecoin', 'NFT Lending', 'Leveraged Farming']) -> dict:
+    def reset():
+        st.session_state.stage = 1
     result = dict()
     result['tvl'] = st.number_input("tvl threshold (in k$)", value=1000, help="minimum tvl to include in universe")*1000
 
@@ -95,6 +112,8 @@ def prompt_protocol_filtering(all_categories) -> dict:
     return result
 
 def prompt_pool_filtering() -> dict:
+    def reset():
+        st.session_state.stage = 2
     result = dict()
     result['tvlUsd'] = st.number_input("tvl threshold (in k$)", value=100, help="minimum tvl to include in universe")*1000
     result['apy'] = st.number_input("apy threshold", value=2., help="minimum apy to include in universe")
@@ -136,30 +155,24 @@ class SessionStage:
         else:
             raise ValueError(f"cannot move from stage {self.stage} to {stage}")
 
+if 'stage' not in st.session_state:
+    st.session_state.stage = 0
 
 # load whitelisted protocols from yaml
 with initialize_tab:
-    use_oracle = st.selectbox("use_oracle", options=[False, True],
-                              help="this is for depeg snipping. Please use none for now",
-                              disabled=True)
-    reference_asset = st.selectbox("reference_asset", options=['usd', 'eth', 'btc'],
-                                   help="What asset you are investing")
+    use_oracle, reference_asset, chains = prompt_initialization()
+    if initialize_pressed := st.button("Initialize"):
+        st.session_state.defillama = FilteredDefiLlama(reference_asset=reference_asset,
+                                                       chains=chains,
+                                                       oracle=coingecko,
+                                                       database=parameters['input_data'][
+                                                           'database'],
+                                                       use_oracle=use_oracle)
+        st.session_state.all_categories = list(st.session_state.defillama.protocols['category'].dropna().unique())
+        st.session_state.stage = 1
+        initialize_pressed = False
 
-    top_chains = coingecko.address_map.count().sort_values(ascending=False)[2:23].index
-    chains = st.multiselect("chains", options=top_chains, default=['Arbitrum', 'Optimism', 'Ethereum'],
-                            help="select chains to include in universe")
-    if 'session_stage' not in st.session_state:
-        st.session_state.session_stage = SessionStage()
-        defillama_obj = FilteredDefiLlama(reference_asset=reference_asset,
-                                      chains=chains,
-                                      oracle=coingecko,
-                                      database=parameters['input_data'][
-                                          'database'],
-                                      use_oracle=use_oracle)
-        st.session_state.session_stage.set(1,
-                                           defillama=defillama_obj)
-
-    if st.session_state.session_stage.stage >= 1:
+    if st.session_state.stage >= 1:
         filters, whitelist = st.tabs(["filters", "whitelist"])
         with filters:
             with st.form("filter_form"):
@@ -174,13 +187,19 @@ with initialize_tab:
                     underlyings = underlyings[underlyings['selected']]['symbol'].tolist()
                 with protocols_col:
                     st.write("### Protocol filter")
-                    protocol_filters = prompt_protocol_filtering(all_categories=list(
-                        st.session_state.session_stage.defillama().protocols['category'].dropna().unique()))
+                    protocol_filters = prompt_protocol_filtering(all_categories=st.session_state.all_categories)
                 with pool_col:
                     st.write("### Pool filter")
                     pool_filters = prompt_pool_filtering()
 
-                filter_form_pressed = st.form_submit_button("Validate underlyings and protocols")
+                if validate_form_pressed := st.form_submit_button("Validate underlyings and protocols"):
+                    st.session_state.defillama.filter(
+                        underlyings=underlyings,
+                        protocol_filters=protocol_filters,
+                        pool_filters=pool_filters)
+                    st.write(
+                        f"found {len(st.session_state.defillama.pools)} pools among {len(st.session_state.defillama.protocols)} protocols")
+                    st.session_state.stage = 2
 
         with whitelist:
             download_whitelist_template_button(FilteredDefiLlama.pegged_symbols[reference_asset])
@@ -195,50 +214,47 @@ with initialize_tab:
                     st.write("### Pool filter")
                     pool_filters = prompt_pool_filtering()
 
-                if st.form_submit_button("Validate whitelist"):
+                if whitelist_form_pressed := st.form_submit_button("Validate whitelist"):
                     if whitelist_file is None:
                         st.write("Please upload a whitelist")
-                        filter_form_pressed = False
+                        whitelist_form_pressed = False
                     else:
                         underlyings = pd.read_excel(whitelist_file, sheet_name='underlyings')[
                             'underlyings'].tolist()
                         protocol_filters = {
                             'selected_protocols': pd.read_excel(whitelist_file, sheet_name='protocols')[
-                                'protocols']}
-                        filter_form_pressed = True
+                                'protocols'].unique()}
+                        st.session_state.defillama.filter(
+                            underlyings=underlyings,
+                            protocol_filters=protocol_filters,
+                            pool_filters=pool_filters)
+                        st.write(
+                            f"found {len(st.session_state.defillama.pools)} pools among {len(st.session_state.defillama.protocols)} protocols")
+                        st.session_state.stage = 2
 
-        if filter_form_pressed and st.session_state.session_stage.stage == 1:
-            st.session_state.session_stage.set(2, defillama=st.session_state.session_stage.defillama())
-            st.session_state.session_stage.defillama().filter(
-                underlyings=underlyings,
-                protocol_filters=protocol_filters,
-                pool_filters=pool_filters)
-            st.write(
-                f"found {len(st.session_state.session_stage.defillama().pools)} pools among {len(st.session_state.session_stage.defillama().protocols)} protocols")
-    if st.session_state.session_stage.stage >= 2:
+    if st.session_state.stage >= 2:
         with st.form("pool_selection"):
-            meta_df = prettify_metadata(st.session_state.session_stage.defillama().pools)
+            meta_df = prettify_metadata(st.session_state.defillama.pools)
             edited_meta = st.data_editor(meta_df[['selected', 'chain', 'project', 'underlyingTokens', 'tvlUsd', 'apy',
                                                   'apyReward', 'rewardTokens', 'predictedClass', 'binnedConfidence']],
                                          use_container_width=True, hide_index=True)
 
             #st.checkbox("Refresh DB", key='resfresh_db', value=False)
             if st.form_submit_button("Predict pool yield"):
-                st.session_state.session_stage.set(3, defillama=st.session_state.session_stage.defillama())
-                st.session_state.session_stage.defillama().pools = st.session_state.session_stage.defillama().pools[edited_meta['selected']]
+                st.session_state.defillama.pools = st.session_state.defillama.pools[edited_meta['selected']]
+                st.session_state.stage = 3
 
                 with st.spinner(f"Fetching data from {parameters['input_data']['database']}"):
                     fetch_summary = {}
-                    st.session_state.session_stage.set(4,
-                                                       defillama=st.session_state.session_stage.defillama(),
-                                                       all_history=st.session_state.session_stage.defillama().refresh_apy_history(fetch_summary=fetch_summary))
-                    errors = len([x for x in fetch_summary if fetch_summary[x] == "error"])
-                    st.write(f'Fetched {len([x for x in fetch_summary if ("Added" in fetch_summary[x]) or ("Created" in fetch_summary[x])])} pools \n'
-                              f' Use Cache for {len([x for x in fetch_summary if fetch_summary[x] == "from db"])} pools \n '
+                    st.session_state.all_history = st.session_state.defillama.refresh_apy_history(fetch_summary=fetch_summary)
+                    st.session_state.stage = 4
+                    errors = len([x for x in fetch_summary if "error" in fetch_summary[x][0]])
+                    st.write(f'Fetched {len([x for x in fetch_summary if ("Added" in fetch_summary[x][0]) or ("Created" in fetch_summary[x][0])])} pools \n'
+                              f' Use Cache for {len([x for x in fetch_summary if "from db" in fetch_summary[x][0]])} pools \n '
                               f'{errors} errors{ ("excluding errorenous pools unless you re-fetch (usually a DefiLama API glitch") if errors > 0 else ""}')
 
-    if st.session_state.session_stage.stage >= 4:
-        pd.concat(st.session_state.session_stage.properties[-1]['all_history'], axis=1).to_csv('all_history.csv')
+    if st.session_state.stage >= 4:
+        pd.concat(st.session_state.all_history, axis=1).to_csv('all_history.csv')
         with open('all_history.csv', "rb") as file:
             st.download_button(
                 label="Download all history",
@@ -248,7 +264,7 @@ with initialize_tab:
             )
 
 with backtest_tab:
-    if st.session_state.session_stage.stage >= 4:
+    if st.session_state.stage >= 4:
         download_grid_template_button()
 
         with st.form("backtest_form"):
@@ -256,6 +272,7 @@ with backtest_tab:
             parameters['backtest']['start_date'] = (date.today() - timedelta(days=90)).isoformat()
             default_parameters = extract_from_paths(target=parameters, paths=parameter_keys)
 
+            override_grid = None
             if uploaded_file := st.file_uploader("Upload a set of backtest parameters (download template above)", type=['csv']):
                 override_grid = pd.read_csv(uploaded_file, index_col=0).to_dict(orient='records')
                 # sorry hack...
@@ -264,17 +281,19 @@ with backtest_tab:
                     record['backtest.end_date'] = get_date_or_timedelta(record['backtest.end_date'], ref_date=date.today())
                     record['backtest.start_date'] = get_date_or_timedelta(record['backtest.start_date'], ref_date=record['backtest.end_date'])
 
-            if st.form_submit_button("Run backtest") and ('override_grid' in st.session_state):
+            if st.form_submit_button("Run backtest") and override_grid is not None:
                 if st.session_state.authentification == 'verified':
                     progress_bar1 = st.progress(value=0.0, text='Running grid...')
                     progress_bar2 = st.progress(value=0.0, text='Running backtest...')
 
-                    st.session_state.session_stage.set(5, result=VaultBacktestEngine.run_grid(parameter_grid=override_grid,
+                    st.session_state.result = VaultBacktestEngine.run_grid(parameter_grid=override_grid,
                                                                            parameters=parameters,
-                                                                           data=st.session_state.session_stages.properties[-1]['all_history'],
+                                                                           data=
+                                                                           st.session_state.all_history,
                                                                            progress_bar1=progress_bar1,
-                                                                           progress_bar2=progress_bar2))
+                                                                           progress_bar2=progress_bar2)
                     progress_bar1.progress(value=1., text='Completed grid')
+                    st.session_state.stage = 5
                 else:
                     with st.sidebar.expander("Expand me"):
                         st.session_state.user_tg_handle = st.sidebar.text_input("Enter your tg handle to backtest:")
@@ -283,7 +302,7 @@ with backtest_tab:
 
 
 with analytics_tab:
-    if (st.session_state.session_stage.stage >= 5) and (selected_run := st.selectbox('Select run name', st.session_state.session_stage.properties[-1]['result']['runs'].keys())):
+    if (st.session_state.stage >= 5) and (selected_run := st.selectbox('Select run name', st.session_state.result['runs'].keys())):
         display_single_backtest(st.session_state.result['runs'][selected_run])
         pd.concat(st.session_state.result['runs'], axis=1).to_csv('logs/runs.csv')
         with open('logs/runs.csv', "rb") as file:
@@ -294,8 +313,8 @@ with analytics_tab:
                 mime='text/csv',
             )
 with grid_tab:
-    if (st.session_state.session_stage.stage >= 5):
-        st.dataframe(st.session_state.session_stage.properties[-1]['result']['grid'])
+    if (st.session_state.stage >= 5):
+        st.dataframe(st.session_state.result['grid'])
 
 
 with execution_tab:
