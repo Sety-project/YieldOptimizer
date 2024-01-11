@@ -7,50 +7,9 @@ from functools import wraps, lru_cache
 
 import pandas as pd
 import pycoingecko
+import streamlit
 
 
-#from cache_to_disk import cache_to_disk
-
-def cache_to_file(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        cache_file = os.path.join(os.path.dirname(__file__), func.__name__ + ''.join(args[1:]) + ''.join(str(kwargs)))
-
-        if os.path.exists(cache_file):
-            with open(cache_file, 'rb') as f:
-                try:
-                    cached_data = pickle.load(f)
-                except Exception as e:
-                    print(f"Error loading cache file: {e}")
-                    cached_data = None
-
-            if cached_data is not None and cached_data['args'] == args and cached_data['kwargs'] == kwargs:
-                return cached_data['result']
-
-        result = func(*args, **kwargs)
-
-        with open(cache_file, 'wb') as f:
-            pickle.dump({'args': args, 'kwargs': kwargs, 'result': result}, f)
-
-        return result
-
-    return wrapper
-
-
-def apply_decorator(cls):
-    for name, method in pycoingecko.CoinGeckoAPI.__dict__.items():
-        if callable(method) and 'fetch_' in name:
-            setattr(cls, name, lru_cache(method))
-    return cls
-#
-# logger = logging.getLogger('cache_to_disk')
-# level = logging.DEBUG
-# handler = logging.StreamHandler()
-# handler.setLevel(level)
-# handler.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
-# logger.addHandler(handler)
-
-@apply_decorator
 class myCoinGeckoAPI(pycoingecko.CoinGeckoAPI):
     defillama_mapping = ({'id': 'id',
                          'symbol': 'symbol',
@@ -141,63 +100,71 @@ class myCoinGeckoAPI(pycoingecko.CoinGeckoAPI):
                           'zilliqa': 'Zilliqa',
                           'zksync': 'zkSync Era'})
 
-    def __init__(self):
-        super().__init__()
+    @streamlit.cache_data
+    def get_address_map(_self) -> pd.DataFrame:
         filename = os.path.join(os.sep, os.getcwd(), 'config', 'coingecko_address_map.csv')
         if not os.path.isfile(filename):
-            ids = self.get_coins_list(include_platform='true')
+            ids = _self.get_coins_list(include_platform='true')
             address_map = pd.concat([pd.Series(x['platforms']
                                                | {'id': x['id'],
                                                   'symbol': x['symbol'],
                                                   'name': x['name']})
                                      for x in ids], axis=1).T
             address_map.columns = address_map.columns
-            self.address_map = address_map.fillna('').set_index('id')
-            self.address_map.to_csv(filename)
+            result = address_map.fillna('').set_index('id')
+            result.to_csv(filename)
         else:
-            self.address_map = pd.read_csv(filename, index_col='id')
+            result = pd.read_csv(filename, index_col='id')
 
-    def adapt_address_map_to_defillama(self) -> None:
+        return myCoinGeckoAPI.adapt_address_map_to_defillama(result)
+
+    @staticmethod
+    def adapt_address_map_to_defillama(address_map) -> pd.DataFrame:
         # keep only columns that are in the chain mapping
-        table = self.address_map.filter(myCoinGeckoAPI.defillama_mapping.keys())
+        table = address_map.filter(myCoinGeckoAPI.defillama_mapping.keys())
         # rename columns to defillama chain names
         table.columns = [myCoinGeckoAPI.defillama_mapping[chain] for chain in table.columns]
-        self.address_map = table
+        return table
 
-    def address_to_id(self, address: str, chain: str) -> str:
-        return self.address_map[self.address_map[chain] == address].index[0]
+    @streamlit.cache_data
+    def address_to_id(_self, address: str, chain: str) -> str:
+        return _self.address_map[_self.address_map[chain] == address].index[0]
 
-    def address_to_symbol(self, address: str, chain: str) -> str:
-        temp = self.address_map.loc[self.address_map[chain] == address, 'symbol'].squeeze()
+    @streamlit.cache_data
+    def address_to_symbol(_self, address: str, chain: str) -> str:
+        temp = _self.address_map.loc[_self.address_map[chain] == address, 'symbol'].squeeze()
         return temp if type(temp) == str else ''
 
-    def fetch_range(self, symbol: str, start: datetime, end: datetime) -> pd.DataFrame:
+    @streamlit.cache_data
+    def fetch_range(_self, symbol: str, start: datetime, end: datetime) -> pd.DataFrame:
         '''
         :param symbol: coin name
         :param start: start date
         :param end: end date
         :return: df with columns: timestamp, open, high, low, close, volume
         '''
-        df = pd.DataFrame(self.get_coin_market_chart_range_by_id(id=symbol, vs_currency='usd',
+        df = pd.DataFrame(_self.get_coin_market_chart_range_by_id(id=symbol, vs_currency='usd',
                                                                  from_timestamp=start.timestamp(),
                                                                  to_timestamp=end.timestamp()),
                           columns=['timestamp', 'open', 'high', 'low', 'close'])
         df['timestamp'] = df['timestamp'].apply(lambda x: datetime.fromtimestamp(x / 1000).replace(tzinfo=timezone.utc))
         return df
 
-    def fetch_market_chart(self, _id: str, days: int, vs_currency='usd') -> pd.DataFrame:
+    @streamlit.cache_data
+    def fetch_market_chart(_self, _id: str, days: int, vs_currency='usd') -> pd.DataFrame:
         '''
         :param symbol: coin name
         :param start: start date
         :param end: end date
         :return: df with columns: timestamp, open, high, low, close, volume
         '''
-        df = pd.DataFrame(self.get_coin_market_chart_by_id(id=_id, days=days, vs_currency=vs_currency)['prices'],
+        df = pd.DataFrame(_self.get_coin_market_chart_by_id(id=_id, days=days, vs_currency=vs_currency)['prices'],
                           columns=['timestamp', 'price'])
         df['timestamp'] = df['timestamp'].apply(lambda x: datetime.fromtimestamp(x / 1000).replace(tzinfo=timezone.utc))
         return df
 
-    def fetch_ohlc(self, id_: str, days: int, vs_currency='usd') -> pd.DataFrame:
+    @streamlit.cache_data
+    def fetch_ohlc(_self, id_: str, days: int, vs_currency='usd') -> pd.DataFrame:
         '''
         :param symbol: coin name
         :param start: start date
@@ -211,7 +178,7 @@ class myCoinGeckoAPI(pycoingecko.CoinGeckoAPI):
         else:
             freq = timedelta(days=4)
 
-        df = pd.DataFrame(self.get_coin_ohlc_by_id(id=id_, vs_currency=vs_currency,
+        df = pd.DataFrame(_self.get_coin_ohlc_by_id(id=id_, vs_currency=vs_currency,
                                                    days=str(days)),
                           columns=['timestamp', 'open', 'high', 'low', 'close'])
         df['timestamp'] = df['timestamp'].apply(lambda x: datetime.fromtimestamp(x / 1000).replace(tzinfo=timezone.utc))

@@ -11,7 +11,7 @@ from sqlalchemy import text as sql_text
 from utils.async_utils import async_wrap
 
 
-class SqlApi():
+class SqlApi:
     def __init__(self, database: str, schema=None):
         if schema is None:
             self.schema = {'date': DateTime(timezone=True),
@@ -30,8 +30,8 @@ class SqlApi():
         the leading underscore is also to accommodate st.cache_data'''
         return pd.read_sql_query(sql_text(query), con=_self.connection, **kwargs)
 
-    async def read(self, instrument: str=None):
-        query = f'''SELECT * FROM \"{instrument}\" WHERE date >= \'{datetime(2023, 2, 20).strftime("%Y-%m-%d")}\'::date ORDER BY date ASC;'''
+    async def read_one(self, instrument: str):
+        query = f'''SELECT * FROM \"{instrument}\" ORDER BY date ASC;'''
         result = await async_wrap(self.read_sql_query)(query, index_col='date')
         result.index = [pd.to_datetime(x, unit='ns', utc=True) for x in result.index]
         return result[~result.index.duplicated()]
@@ -40,7 +40,7 @@ class SqlApi():
         '''write to db
          if table exists, only write new data
          add 'updated' column'''
-        if pool in self.list_tables():
+        if pool in self.list_tables:
             existing_dates = self.read_sql_query(f"""SELECT date FROM \"{pool}\"""")
             new_data = data[~data['date'].isin(existing_dates['date'].apply(lambda t: pd.to_datetime(t, infer_datetime_format=True, utc=True, unit='ns', errors='coerce')))]
             result = f"Added {new_data.shape[0]} rows to {pool}"
@@ -48,25 +48,25 @@ class SqlApi():
             new_data = data
             result = f"Created {pool}"
 
-        new_data['updated'] = datetime.now(timezone.utc)
-        await async_wrap(new_data.to_sql)(name=pool, con=self.engine, if_exists='append', index=False, dtype=self.schema)
+        if not new_data.empty:
+            new_data['updated'] = datetime.now(timezone.utc)
+            await async_wrap(new_data.to_sql)(name=pool, con=self.engine, if_exists='append', index=False, dtype=self.schema)
         return result
 
-    async def read_metadata(self):
-        query = f'''SELECT pool, updated FROM metadata;'''
-        result = await async_wrap(self.read_sql_query)(query, index_col='pool')
-        return result
+    def read_metadata(self):
+        query = '''SELECT * FROM metadata;'''
+        return self.read_sql_query(query, index_col='name')
 
-    async def write_metadata(self, data: pd.DataFrame):
+    def write_metadata(self, data: pd.DataFrame):
         data['updated'] = datetime.now(timezone.utc)
-        await async_wrap(data.to_sql)(name='metadata', con=self.engine, if_exists='replace', index=False,
+        data.to_sql(name='metadata', con=self.engine, if_exists='replace', index=False,
                                           dtype=self.schema)
         return "updated metadata"
 
     async def last_updated(self, metadata: dict = None):
         if 'metadata' in self.tables:
-            prev_metadata = await self.read_metadata()
-            return prev_metadata[metadata["pool"]].squeeze()
+            prev_metadata = self.read_metadata()
+            return prev_metadata.loc[metadata["name"], 'updated']
         elif metadata['name'] in self.tables:
             query = f'''SELECT MAX(updated) FROM \"{metadata['name']}\";'''
             result = await async_wrap(pd.read_sql_query)(sql_text(query), con=self.connection)
@@ -85,8 +85,7 @@ class SqlApi():
     def list_tables(self):
         meta = MetaData()
         meta.reflect(bind=self.engine)
-        result = [tab for tab in meta.tables if tab!='metadata']
-        return result
+        return list(meta.tables)
 
 
 if __name__ == '__main__':

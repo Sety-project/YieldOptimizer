@@ -99,9 +99,9 @@ class FilteredDefiLlama(DefiLlama):
         self.sql_api: SqlApi = SqlApi(st.secrets[database])
         self.connection: Connection = self.sql_api.engine.connect()
 
-        self.protocols = self.get_protocols()
+        self.protocols: pd.DataFrame = self.get_protocols()
         self.shortlisted_tokens = None
-        self.pools = self.get_pools_yields()
+        self.pools: pd.DataFrame = self.get_pools_yields()
 
     def filter(self, underlyings: list,
                protocol_filters: dict,
@@ -135,7 +135,10 @@ class FilteredDefiLlama(DefiLlama):
         if 'category' in kwargs:
             protocols = protocols[~protocols['category'].isin(kwargs['category'])]
         if selected_protocols:
-            protocols = protocols[protocols['name'].isin(selected_protocols)]
+            try:
+                protocols = protocols[protocols['name'].isin(selected_protocols)]
+            except:
+                pass
 
         return protocols
 
@@ -155,6 +158,8 @@ class FilteredDefiLlama(DefiLlama):
         # filter
         pools = pools[pools['chain'].isin(self.chains)]
         pools = pools[pools['tvlUsd'] >= kwargs['tvlUsd']]
+        pools = pools[pools['apy'] >= kwargs['apy']]
+        pools = pools[pools['apyMean30d'] >= kwargs['apyMean30d']]
         pools = pools[pools['project'].isin(self.protocols['name'].values)]
         pools = pools[pools.apply(lambda x: all(y in self.shortlisted_tokens[x['chain']].values
                                                 for y in x['underlyingTokens'])
@@ -165,7 +170,7 @@ class FilteredDefiLlama(DefiLlama):
 
     #@ignore_error
     #@cache_data
-    async def apy_history(self, metadata: dict,  **kwargs) -> pd.DataFrame:
+    async def apy_history(self, metadata: dict, **kwargs) -> pd.DataFrame:
         '''gets various components of apy history from defillama
         DB errors may be solved by purging queries at https://console.aiven.io/account/xxxxxxx/project/streamlit/services/streamlit/current-queries'''
 
@@ -175,7 +180,10 @@ class FilteredDefiLlama(DefiLlama):
             and last_updated > datetime.now(
                     timezone.utc) - timedelta(days=1)):
             kwargs['fetch_summary'][metadata["name"]] = 'from db'
-            return await self.sql_api.read(metadata['name'])
+            st.write(f'{metadata["name"]} from db')
+            return await self.sql_api.read_one(metadata['name'])
+        else:
+            pass
 
         # get pool history
         try:
@@ -183,6 +191,7 @@ class FilteredDefiLlama(DefiLlama):
         except Exception as e:
             self.logger.warning(f'{metadata["pool"]} {str(e)}')
             kwargs['fetch_summary'][metadata["name"]] = 'error'
+            st.write(f'error {metadata["name"]}: {str(e)}')
             return pd.DataFrame()
         if self.use_oracle:
             pool_history = await self.fetch_oracle(metadata, pool_history)
@@ -218,6 +227,7 @@ class FilteredDefiLlama(DefiLlama):
         result['date'] = result['date'].apply(lambda t: pd.to_datetime(t, unit='ns', utc=True))
         fetch_message = await self.sql_api.write(result, metadata['name'])
         kwargs['fetch_summary'][metadata["name"]] = fetch_message
+        st.write(fetch_message)
         return result.set_index('date')
 
     async def fetch_oracle(self, metadata, pool_history):
@@ -268,13 +278,20 @@ class FilteredDefiLlama(DefiLlama):
         reward_discount = reward_discount.min(axis=1)
         return reward_discount
 
-    def all_apy_history(self, **kwargs) -> FileData:
+    def refresh_apy_history(self, **kwargs) -> FileData:
         metadata = [x.to_dict() for _, x in self.pools.iterrows()]
-        coros = [self.apy_history(meta, **kwargs) for meta in metadata] + [self.sql_api.write_metadata(pd.DataFrame(metadata))]
+        coros = [self.apy_history(meta, **kwargs) for meta in metadata]
         data = asyncio.run(safe_gather(coros))
+        self.sql_api.write_metadata(pd.DataFrame(metadata))
 
-        return FileData({key['name']: value for key, value in zip(metadata, data[:-1])})
+        return FileData({key['name']: value for key, value in zip(metadata, data)})
 
+    def apy_history_from_db(self, **kwargs) -> FileData:
+        pool_list = list(self.pools['name'].unique())
+        data = self.sql_api.read_multiple(pool_list)
+        kwargs['fetch_summary'] = {x: "from_db" for x in st.session_state.defillama.pools.index}
+
+        return FileData({key['name']: value for key, value in zip(pool_list, data)})
 
 def compute_moments(apy: dict[str, pd.Series]) -> dict[str, pd.Series]:
     new_apy: dict = {}
