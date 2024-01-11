@@ -156,7 +156,7 @@ class YieldStrategy(VaultRebalancingStrategy):
 
         # yields * dt
         dt = (cur_performance.name - prev_index) / timedelta(days=365)
-        tvl = self.research_engine.X.xs(level=['feature', 'window'], key=['tvl', 'as_is'], axis=1).loc[prev_index].ffill().fillna(0.0).values.clip(min=1e-18)
+        tvl = self.research_engine.X.xs(level=('feature', 'window'), key=('tvl', 'as_is'), axis=1).loc[prev_index].ffill().fillna(0.0).values.clip(min=1e-18)
         dilutor = 1 / (1 + prev_state.weights/tvl)
         yields_dt = cur_performance.values * dilutor * dt
         base_yield_dt = 0.0

@@ -91,8 +91,8 @@ class VaultBacktestEngine:
         weights = {f'weight_{i}': weight
                    for i, weight in enumerate(prev_state.weights)}
         weights = pd.Series(weights)
-        apy = rebalancing_strategy.research_engine.X.xs(key=['apy', 'as_is'], axis=1, level=['feature', 'window'])
-        apyReward = rebalancing_strategy.research_engine.X.xs(key=['apyReward', 'as_is'], axis=1, level=['feature', 'window'])
+        apy = rebalancing_strategy.research_engine.X.xs(key=('apy', 'as_is'), axis=1, level=('feature', 'window'))
+        apyReward = rebalancing_strategy.research_engine.X.xs(key=('apyReward', 'as_is'), axis=1, level=('feature', 'window'))
 
         # yields = {f'apy_{i}': perf
         #           for i, perf in enumerate(apy.loc[index].values)}

@@ -35,7 +35,7 @@ class BacktestEngine:
         Runs a backtest per instrument.
         '''
         backtests = []
-        for (raw_feature, frequency), label_df in prediction_engine.Y.groupby(level=['feature', 'window'], axis=1):
+        for (raw_feature, frequency), label_df in prediction_engine.Y.groupby(level=('feature', 'window'), axis=1):
             for model_name, model_params in prediction_engine.run_parameters['models'][raw_feature].items():
                 for _, _, _, split_index in filter(lambda x: x[0] == raw_feature
                                                     and x[1] == frequency
@@ -72,7 +72,7 @@ class BacktestEngine:
 
         for model, label, frequency in set(zip(*[df.columns.get_level_values(level) for level in ['model', 'feature', 'frequency']])):
             cumulative_pnl = df.xs((model, label, frequency, 'cumulative_pnl'),
-                                   level=['model', 'feature', 'frequency', 'datatype'],
+                                   level=('model', 'feature', 'frequency', 'datatype'),
                                    axis=1)
             # remove index
             cumulative_pnl = pd.DataFrame({col: data.dropna().values

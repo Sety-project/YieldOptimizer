@@ -304,7 +304,7 @@ class TrivialEwmPredictor(sklearn.base.BaseEstimator):
         '''
         precompute, for speed
         '''
-        apy_X = raw_X.xs(level=['feature', 'window'], key=['apy', 'as_is'], axis=1).ffill().fillna(0.0)
+        apy_X = raw_X.xs(level=('feature', 'window'), key=('apy', 'as_is'), axis=1).ffill().fillna(0.0)
         apy_X.index = [pd.to_datetime(x, unit='ns', utc=True) for x in raw_X.index]
         # select only rows of X that deviate from mean by less than 3 stdev
         mean = apy_X.ewm(times=apy_X.index, halflife=self.halflife).mean()
@@ -326,7 +326,7 @@ class TrivialEwmPredictor(sklearn.base.BaseEstimator):
             if depeg != dict():
                 self.apy[instrument] -= pd.concat(depeg, axis=1).mean(axis=1).fillna(0.0) / self.horizon.total_seconds() * 365.25 * 24 * 60 * 60
                 self.apy[instrument] = self.apy[instrument].clip(lower=0.0)
-        self.tvl = raw_X.xs(level=['feature', 'window'], key=['tvl', 'as_is'], axis=1).ffill().fillna(0.0)
+        self.tvl = raw_X.xs(level=('feature', 'window'), key=('tvl', 'as_is'), axis=1).ffill().fillna(0.0)
 
         return
         #
@@ -387,7 +387,7 @@ class DefillamaResearchEngine(ResearchEngine):
         for each label/model/fold, fits one model for all instruments.
         '''
         # for each (all instruments, 1 feature, 1 horizon)...
-        for (raw_feature, frequency), label_df in self.Y.groupby(level=['feature', 'window'], axis=1):
+        for (raw_feature, frequency), label_df in self.Y.groupby(level=('feature', 'window'), axis=1):
             # for each model for that feature...
             if raw_feature not in self.run_parameters['models']:
                 continue
