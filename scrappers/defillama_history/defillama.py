@@ -99,9 +99,11 @@ class FilteredDefiLlama(DefiLlama):
         self.sql_api: SqlApi = SqlApi(st.secrets[database])
         self.connection: Connection = self.sql_api.engine.connect()
 
-        self.protocols: pd.DataFrame = self.get_protocols()
+        self.all_protocol = self.get_protocols()
+        self.protocols: pd.DataFrame = self.all_protocol
         self.shortlisted_tokens = None
-        self.pools: pd.DataFrame = self.get_pools_yields()
+        self.all_pool = self.get_pools_yields()
+        self.pools: pd.DataFrame = self.all_pool
 
     def filter(self, underlyings: list,
                protocol_filters: dict,
@@ -120,7 +122,7 @@ class FilteredDefiLlama(DefiLlama):
                          selected_protocols: list = None,
                          **kwargs) -> None:
         # fetch
-        protocols = self.protocols
+        protocols = self.all_protocol
 
         # normalize
         protocols['name'] = protocols['name'].apply(lambda s: s.lower().replace(' ', '-'))
@@ -134,17 +136,14 @@ class FilteredDefiLlama(DefiLlama):
             protocols = protocols[(protocols['listedAt'].fillna(1e11).apply(date.fromtimestamp) <= kwargs['listedAt'])]
         if 'category' in kwargs:
             protocols = protocols[~protocols['category'].isin(kwargs['category'])]
-        if selected_protocols:
-            try:
-                protocols = protocols[protocols['name'].isin(selected_protocols)]
-            except:
-                pass
+        if selected_protocols is not None:
+            protocols = protocols[protocols['name'].isin(selected_protocols)]
 
         return protocols
 
     def filter_pools(self, **kwargs) -> None:
         # fetch
-        pools = self.pools
+        pools = self.all_pool
 
         # normalize
         pools['project'] = pools['project'].apply(lambda s: s.lower().replace(' ', '-'))
@@ -170,27 +169,25 @@ class FilteredDefiLlama(DefiLlama):
 
     #@ignore_error
     #@cache_data
-    async def apy_history(self, metadata: dict, **kwargs) -> pd.DataFrame:
+    async def apy_history(self, metadata: dict, connection: Connection, **kwargs) -> pd.DataFrame:
         '''gets various components of apy history from defillama
         DB errors may be solved by purging queries at https://console.aiven.io/account/xxxxxxx/project/streamlit/services/streamlit/current-queries'''
 
         # caching #TODO: daily for now
-        last_updated = await self.sql_api.last_updated(metadata)
+        last_updated = await self.sql_api.last_updated(metadata, connection=connection)
         if (last_updated is not None
             and last_updated > datetime.now(
                     timezone.utc) - timedelta(days=1)):
-            kwargs['fetch_summary'][metadata["name"]] = 'from db'
+            kwargs['fetch_summary'][metadata["name"]] = ('from db', last_updated)
             st.write(f'{metadata["name"]} from db')
-            return await self.sql_api.read_one(metadata['name'])
-        else:
-            pass
+            return await self.sql_api.read_one(metadata['name'], connection=connection)
 
         # get pool history
         try:
             pool_history = await async_wrap(self.get_pool_hist_apy)(metadata['pool'])
         except Exception as e:
             self.logger.warning(f'{metadata["pool"]} {str(e)}')
-            kwargs['fetch_summary'][metadata["name"]] = 'error'
+            kwargs['fetch_summary'][metadata["name"]] = ('error',None)
             st.write(f'error {metadata["name"]}: {str(e)}')
             return pd.DataFrame()
         if self.use_oracle:
@@ -225,8 +222,8 @@ class FilteredDefiLlama(DefiLlama):
 
         result = pd.DataFrame(res_dict).reset_index().rename(columns={'index': 'date'})
         result['date'] = result['date'].apply(lambda t: pd.to_datetime(t, unit='ns', utc=True))
-        fetch_message = await self.sql_api.write(result, metadata['name'])
-        kwargs['fetch_summary'][metadata["name"]] = fetch_message
+        fetch_message = await self.sql_api.write(result, metadata['name'], connection=connection)
+        kwargs['fetch_summary'][metadata["name"]] = (fetch_message, datetime.now(timezone.utc))
         st.write(fetch_message)
         return result.set_index('date')
 
@@ -280,11 +277,14 @@ class FilteredDefiLlama(DefiLlama):
 
     def refresh_apy_history(self, **kwargs) -> FileData:
         metadata = [x.to_dict() for _, x in self.pools.iterrows()]
-        coros = [self.apy_history(meta, **kwargs) for meta in metadata]
-        data = asyncio.run(safe_gather(coros))
-        self.sql_api.write_metadata(pd.DataFrame(metadata))
+        prev_metadata = self.sql_api.read_metadata() if 'metadata' in self.sql_api.list_tables() else None
+        with self.sql_api.engine.connect() as connection:
+            coros = [self.apy_history(meta, prev_metadata=prev_metadata, connection=connection, **kwargs) for meta in metadata]
+            data = asyncio.run(safe_gather(coros))
+            self.pools['updated'] = self.pools['name'].apply(lambda pool: kwargs['fetch_summary'][pool][1])
+            self.sql_api.write_metadata(self.pools, connection=connection)
 
-        return FileData({key['name']: value for key, value in zip(metadata, data)})
+        return FileData({key['name']: value for key, value in zip(metadata, data) if not value.empty})
 
     def apy_history_from_db(self, **kwargs) -> FileData:
         pool_list = list(self.pools['name'].unique())
