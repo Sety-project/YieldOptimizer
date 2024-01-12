@@ -1,4 +1,5 @@
 import html
+import threading
 from copy import deepcopy
 from datetime import date, timedelta
 
@@ -211,3 +212,25 @@ def show_edits() -> list:
                       "backtest.start_date":
                           st.date_input("backtest start", value=date.today() - timedelta(days=90)).isoformat(),
                       }]
+
+class MyProgressBar:
+    '''A progress bar with increment progress (why did i have to do that...)'''
+    def __init__(self, length, **kwargs):
+        self.progress_bar = st.progress(**kwargs)
+        self._lock = threading.Lock()
+        self.length: float = length
+        self._progress = 0
+
+    def __enter__(self):
+        self._lock.acquire()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self._lock.release()
+
+    def increment(self, value: float=1., text: str = ''):
+        assert value >= 0
+        assert value <= self.length
+        with self:
+            self._progress += value/self.length
+            self.progress_bar.progress(value=np.clip(self._progress, a_min=0, a_max=1), text=text)
