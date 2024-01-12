@@ -20,7 +20,7 @@ class SqlApi:
                            'apyReward': Float,
                            'il': Float,
                            'tvl': Float}
-        self.engine: Engine = create_engine(database, pool_size=min(10, safe_gather_limit), max_overflow=20, pool_recycle=3600)
+        self.engine: Engine = create_engine(database, pool_size=min(20, safe_gather_limit), max_overflow=20, pool_recycle=3600)
         self.tables: list = self.list_tables()
 
     #@st.cache_data
