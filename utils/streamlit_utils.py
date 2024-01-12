@@ -8,6 +8,13 @@ import pandas as pd
 import streamlit as st
 from plotly import express as px
 
+from scrappers.defillama_history.coingecko import myCoinGeckoAPI
+from utils.postgres import SqlApi
+
+coingecko = myCoinGeckoAPI()
+with st.spinner('fetching meta data'):
+    coingecko.address_map = coingecko.get_address_map()
+
 
 def check_whitelist():
     if st.session_state.user_tg_handle in st.secrets.whitelist:
@@ -23,13 +30,88 @@ def check_whitelist():
     st.session_state.password = ""
 
 
-def human_format(num):
-    num = float('{:.3g}'.format(num))
-    magnitude = 0
-    while abs(num) >= 1000:
-        magnitude += 1
-        num /= 1000.0
-    return '{}{}'.format('{:f}'.format(num).rstrip('0').rstrip('.'), ['', 'K', 'M', 'B', 'T'][magnitude])
+def authentification_sidebar():
+    st.session_state.authentification = "unverified"
+    st.session_state.user_tg_handle = st.sidebar.text_input("Enter your tg handle to backtest:")
+    if st.session_state.authentification != "verified":
+        check_whitelist()
+    if (
+        st.session_state.user_tg_handle in st.secrets.admins
+        and st.sidebar.text_input("DB to reset (don't !)", key='db_delete')
+    ):
+        db = SqlApi(st.secrets[st.session_state.db_delete])
+        db.delete()
+        st.caption(f"deleted {len(db.list_tables())} from {st.session_state.db_delete}")
+
+
+def prompt_initialization():
+    def reset():
+        st.session_state.stage = 0
+    use_oracle = st.selectbox("use_oracle", options=[False, True],
+                              help="this is for depeg snipping. Please use none for now",
+                              disabled=True, on_change=reset)
+    reference_asset = st.selectbox("reference_asset", options=['usd', 'eth', 'btc'],
+                                   help="What asset you are investing", on_change=reset)
+    top_chains = coingecko.address_map.count().sort_values(ascending=False)[2:23].index
+    chains = st.multiselect("chains", options=top_chains, default=['Arbitrum', 'Optimism', 'Ethereum'],
+                            help="select chains to include in universe", on_change=reset)
+
+    return use_oracle, reference_asset, chains
+
+
+def prompt_protocol_filtering(all_categories,
+                              my_categories=['Liquid Staking', 'Bridge', 'Lending', 'CDP', 'Dexes', 'RWA', 'Yield',
+                                             'Farm', 'Synthetics',
+                                             'Staking Pool', 'Derivatives', 'Yield Aggregator', 'Insurance',
+                                             'Liquidity manager', 'Algo-Stables',
+                                             'Decentralized Stablecoin', 'NFT Lending', 'Leveraged Farming']) -> dict:
+    def reset():
+        st.session_state.stage = 1
+    result = dict()
+    result['tvl'] = st.number_input("tvl threshold (in k$)", value=1000, help="minimum tvl to include in universe")*1000
+
+    categories = st.multiselect("categories", default=my_categories,
+                                options=all_categories,
+                                help="select categories to include in universe")
+    result['categories'] = categories
+
+    # listedAt = st.slider("listedAt",
+    #                      min_value=date.fromtimestamp(st.session_state.defillama.protocols['listedAt'].dropna().min()),
+    #                      value=date.fromtimestamp(st.session_state.defillama.protocols['listedAt'].dropna().mean()),
+    #                      max_value=date.fromtimestamp(st.session_state.defillama.protocols['listedAt'].dropna().max()),
+    #                      step=timedelta(weeks=1),
+    #                      help="date of listing")
+    # result['listedAt'] = listedAt
+
+    return result
+
+
+def prompt_pool_filtering() -> dict:
+    def reset():
+        st.session_state.stage = 2
+    result = dict()
+    result['tvlUsd'] = st.number_input("tvl threshold (in k$)", value=100, help="minimum tvl to include in universe")*1000
+    result['apy'] = st.number_input("apy threshold", value=2., help="minimum apy to include in universe")
+    result['apyMean30d'] = st.number_input("apyMean30d threshold", value=2., help="minimum apyMean30d to include in universe")
+
+    return result
+
+
+def prettify_metadata(input_df: pd.DataFrame) -> pd.DataFrame:
+    meta_df = deepcopy(input_df)
+    try:
+        meta_df['underlyingTokens'] = input_df.apply(lambda meta: [coingecko.address_to_symbol(address, meta['chain'])
+                                                                  for address in meta['underlyingTokens']] if meta[
+            'underlyingTokens'] else [],
+                                                    axis=1)
+        meta_df['rewardTokens'] = input_df.apply(
+            lambda meta: [coingecko.address_to_symbol(address.lower(), meta['chain'])
+                          for address in meta['rewardTokens']] if meta['rewardTokens'] else [],
+            axis=1)
+    except Exception as e:
+        print(e)
+    meta_df['selected'] = True
+    return meta_df
 
 
 def download_grid_template_button() -> None:
@@ -170,49 +252,6 @@ def display_backtest_grid(grid):
     except Exception as e:
         st.write(str(e))
 
-
-def show_edits() -> list:
-    return [{'strategy.initial_wealth': np.power(10,
-                                                          st.slider(
-                                                              'initial wealth log(10)',
-                                                              value=6.,
-                                                              min_value=2.,
-                                                              max_value=8., step=0.1,
-                                                              help="log(10) of initial wealth")
-                                                          ),
-                      'run_parameters.models.apy.TrivialEwmPredictor.params.cap': 3,
-                      'run_parameters.models.apy.TrivialEwmPredictor.params.halflife':
-                          '{}d'.format(
-                              st.slider('predictor halflife', value=10, min_value=1,
-                                        max_value=365,
-                                        help="in days; longer means slower to adapt to new data")),
-                      'strategy.cost':
-                          st.slider('slippage', value=5, min_value=0, max_value=100,
-                                    help="in bps") / 10000,
-                      'strategy.gas':
-                          st.slider('gas', value=50, min_value=0, max_value=200,
-                                    help="avg cost of tx in USD"),
-                      'strategy.base_buffer':
-                          st.slider('liquidity buffer', value=10, min_value=0,
-                                    max_value=25,
-                                    help="idle capital to keep as buffer, in %") / 100,
-                      "run_parameters.models.apy.TrivialEwmPredictor.params.horizon":
-                          "99y",
-                      "label_map.apy.horizons": [
-                          st.slider('invest horizon', value=30, min_value=1,
-                                    max_value=90,
-                                    help="assumed holding period of investment, in days. This is only used to convert fixed costs in apy inside optimizers")
-                      ],
-                      "strategy.concentration_limit":
-                          st.slider('concentration limit', value=40, min_value=10,
-                                    max_value=100,
-                                    help="max allocation into a single pool, in %") / 100,
-                      "backtest.end_date":
-                          st.date_input("backtest end", value=date.today()).isoformat(),
-                      "backtest.start_date":
-                          st.date_input("backtest start", value=date.today() - timedelta(days=90)).isoformat(),
-                      }]
-
 class MyProgressBar:
     '''A progress bar with increment progress (why did i have to do that...)'''
     def __init__(self, length, **kwargs):
@@ -234,3 +273,5 @@ class MyProgressBar:
         with self:
             self._progress += value/self.length
             self.progress_bar.progress(value=np.clip(self._progress, a_min=0, a_max=1), text=text)
+
+
