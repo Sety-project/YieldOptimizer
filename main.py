@@ -15,7 +15,7 @@ from strategies.vault_backtest import VaultBacktestEngine
 from utils.io_utils import extract_from_paths, get_date_or_timedelta
 from utils.postgres import SqlApi
 from utils.streamlit_utils import check_whitelist, human_format, download_grid_template_button, \
-    display_single_backtest, download_whitelist_template_button
+    display_single_backtest, download_whitelist_template_button, MyProgressBar
 
 
 def prettify_metadata(input_df: pd.DataFrame) -> pd.DataFrame:
@@ -244,14 +244,16 @@ with initialize_tab:
                 st.session_state.defillama.pools = st.session_state.defillama.pools[edited_meta['selected']]
                 st.session_state.stage = 3
 
-                with st.spinner(f"Fetching data from {parameters['input_data']['database']}"):
-                    fetch_summary = {}
-                    st.session_state.all_history = st.session_state.defillama.refresh_apy_history(fetch_summary=fetch_summary)
-                    st.session_state.stage = 4
-                    errors = len([x for x in fetch_summary if "error" in fetch_summary[x][0]])
-                    st.write(f'Fetched {len([x for x in fetch_summary if ("Added" in fetch_summary[x][0]) or ("Created" in fetch_summary[x][0])])} pools \n'
-                              f' Use Cache for {len([x for x in fetch_summary if "from db" in fetch_summary[x][0]])} pools \n '
-                              f'{errors} errors{ ("excluding errorenous pools unless you re-fetch (usually a DefiLama API glitch") if errors > 0 else ""}')
+                progress_bar = MyProgressBar(value=0.0,
+                                             length=st.session_state.defillama.pools.shape[0],
+                                             text=f"Fetching data from {parameters['input_data']['database']}")
+                fetch_summary = {}
+                st.session_state.all_history = st.session_state.defillama.refresh_apy_history(fetch_summary=fetch_summary, progress_bar=progress_bar)
+                st.session_state.stage = 4
+                errors = len([x for x in fetch_summary if "error" in fetch_summary[x][0]])
+                progress_bar.progress_bar.progress(value=1.0, text=f'Fetched {len([x for x in fetch_summary if ("Added" in fetch_summary[x][0]) or ("Created" in fetch_summary[x][0])])} pools \n'
+                          f' Use Cache for {len([x for x in fetch_summary if "from db" in fetch_summary[x][0]])} pools \n '
+                          f'{errors} errors{ ("excluding errorenous pools unless you re-fetch (usually a DefiLama API glitch") if errors > 0 else ""}')
 
     if st.session_state.stage >= 4:
         pd.concat(st.session_state.all_history, axis=1).to_csv('all_history.csv')

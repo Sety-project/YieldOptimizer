@@ -13,6 +13,7 @@ import yaml
 from research.research_engine import FileData
 from scrappers.defillama_history.coingecko import myCoinGeckoAPI
 from utils.postgres import SqlApi, Connection
+from utils.streamlit_utils import MyProgressBar
 
 try:
     from utils.async_utils import async_wrap, safe_gather
@@ -169,26 +170,32 @@ class FilteredDefiLlama(DefiLlama):
 
     #@ignore_error
     #@cache_data
-    async def apy_history(self, metadata: dict, connection: Connection, **kwargs) -> pd.DataFrame:
+    async def apy_history(self,
+                          metadata: dict,
+                          prev_metadata: pd.DataFrame,
+                          connection: Connection,
+                          fetch_summary: dict,
+                          progress_bar: MyProgressBar,
+                          **kwargs) -> pd.DataFrame:
         '''gets various components of apy history from defillama
         DB errors may be solved by purging queries at https://console.aiven.io/account/xxxxxxx/project/streamlit/services/streamlit/current-queries'''
 
         # caching #TODO: daily for now
-        last_updated = await self.sql_api.last_updated(metadata, connection=connection)
+        last_updated = await self.sql_api.last_updated(metadata, prev_metadata=prev_metadata)
         if (last_updated is not None
             and last_updated > datetime.now(
                     timezone.utc) - timedelta(days=1)):
-            kwargs['fetch_summary'][metadata["name"]] = ('from db', last_updated)
-            st.write(f'{metadata["name"]} from db')
-            return await self.sql_api.read_one(metadata['name'], connection=connection)
+            fetch_summary[metadata["name"]] = ('from db', last_updated)
+            progress_bar.increment(text=f'{metadata["name"]} from db')
+            return await self.sql_api.read_one(metadata['name'])
 
         # get pool history
         try:
             pool_history = await async_wrap(self.get_pool_hist_apy)(metadata['pool'])
         except Exception as e:
             self.logger.warning(f'{metadata["pool"]} {str(e)}')
-            kwargs['fetch_summary'][metadata["name"]] = ('error',None)
-            st.write(f'error {metadata["name"]}: {str(e)}')
+            fetch_summary[metadata["name"]] = ('error',None)
+            progress_bar.increment(text=f'error {metadata["name"]}: {str(e)}')
             return pd.DataFrame()
         if self.use_oracle:
             pool_history = await self.fetch_oracle(metadata, pool_history)
@@ -222,10 +229,25 @@ class FilteredDefiLlama(DefiLlama):
 
         result = pd.DataFrame(res_dict).reset_index().rename(columns={'index': 'date'})
         result['date'] = result['date'].apply(lambda t: pd.to_datetime(t, unit='ns', utc=True))
-        fetch_message = await self.sql_api.write(result, metadata['name'], connection=connection)
-        kwargs['fetch_summary'][metadata["name"]] = (fetch_message, datetime.now(timezone.utc))
-        st.write(fetch_message)
+        fetch_message = await self.sql_api.write(result, metadata['name'])
+        fetch_summary[metadata["name"]] = (fetch_message, datetime.now(timezone.utc))
+        progress_bar.increment(text=fetch_message)
         return result.set_index('date')
+
+    def refresh_apy_history(self, fetch_summary: dict, progress_bar: MyProgressBar) -> FileData:
+        metadata = [x.to_dict() for _, x in self.pools.iterrows()]
+        with self.sql_api.engine.connect() as connection:
+            prev_metadata = self.sql_api.read_metadata()
+            coros = [self.apy_history(meta,
+                                      prev_metadata=prev_metadata,
+                                      connection=connection,
+                                      fetch_summary=fetch_summary,
+                                      progress_bar=progress_bar) for meta in metadata]
+            data = asyncio.run(safe_gather(coros))
+            self.pools['updated'] = self.pools['name'].apply(lambda pool: fetch_summary[pool][1])
+            self.sql_api.write_metadata(self.pools)
+
+        return FileData({key['name']: value for key, value in zip(metadata, data) if not value.empty})
 
     async def fetch_oracle(self, metadata, pool_history):
         if metadata['underlyingTokens'] is not None:
@@ -241,7 +263,6 @@ class FilteredDefiLlama(DefiLlama):
                 pool_history.join(prices.rename(columns={'price': f'underlying{i}'}), how='outer').interpolate(
                     'index').loc[pool_history.index]
         return pool_history
-
 
     @ignore_error
     async def discount_reward_by_minmax(self, token_addrs_n_chains, **kwargs) -> pd.Series:
@@ -275,23 +296,6 @@ class FilteredDefiLlama(DefiLlama):
         reward_discount = reward_discount.min(axis=1)
         return reward_discount
 
-    def refresh_apy_history(self, **kwargs) -> FileData:
-        metadata = [x.to_dict() for _, x in self.pools.iterrows()]
-        prev_metadata = self.sql_api.read_metadata() if 'metadata' in self.sql_api.list_tables() else None
-        with self.sql_api.engine.connect() as connection:
-            coros = [self.apy_history(meta, prev_metadata=prev_metadata, connection=connection, **kwargs) for meta in metadata]
-            data = asyncio.run(safe_gather(coros))
-            self.pools['updated'] = self.pools['name'].apply(lambda pool: kwargs['fetch_summary'][pool][1])
-            self.sql_api.write_metadata(self.pools, connection=connection)
-
-        return FileData({key['name']: value for key, value in zip(metadata, data) if not value.empty})
-
-    def apy_history_from_db(self, **kwargs) -> FileData:
-        pool_list = list(self.pools['name'].unique())
-        data = self.sql_api.read_multiple(pool_list)
-        kwargs['fetch_summary'] = {x: "from_db" for x in st.session_state.defillama.pools.index}
-
-        return FileData({key['name']: value for key, value in zip(pool_list, data)})
 
 def compute_moments(apy: dict[str, pd.Series]) -> dict[str, pd.Series]:
     new_apy: dict = {}
