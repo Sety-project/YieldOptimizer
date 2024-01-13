@@ -186,7 +186,7 @@ class FilteredDefiLlama(DefiLlama):
             and last_updated > datetime.now(
                     timezone.utc) - timedelta(days=1)):
             fetch_summary[metadata["name"]] = ('from db', last_updated)
-            progress_bar.increment(text=f'{metadata["name"]} from db')
+            progress_bar.increment(text=f'From DB {metadata["name"]}')
             return await self.sql_api.read_one(metadata['name'])
 
         # get pool history
