@@ -1,0 +1,12 @@
+.streamlit/secrets*
+.venv/
+logs/
+*.csv
+*.xls*
+
+
+
+
+
+
+
