@@ -1,8 +1,6 @@
-import html
 import os
 import threading
 from copy import deepcopy
-from datetime import date, timedelta
 
 import numpy as np
 import pandas as pd
@@ -24,11 +22,6 @@ def check_whitelist():
         st.sidebar.success(f'logged in as {st.session_state.user_tg_handle}')
     else:
         st.session_state.authentification = "incorrect"
-        st.warning(
-            html.unescape(
-                'chat https://t.me/daviddarr, then enter your tg handle in the sidebar to get access'
-            )
-        )
     st.session_state.password = ""
 
 
@@ -54,8 +47,8 @@ def authentification_sidebar():
         else:
             with open(os.path.join(os.sep, os.getcwd(), "config", 'params.yaml'), 'r') as fp:
                 st.session_state.parameters = yaml.safe_load(fp)
-            st.write('## session parameters')
-            st.sidebar.json(st.session_state.parameters)
+        st.sidebar.subheader("Session parameters", divider='grey')
+        st.sidebar.json(st.session_state.parameters)
     else:
         with open(os.path.join(os.sep, os.getcwd(), "config", 'params.yaml'), 'r') as fp:
             st.session_state.parameters = yaml.safe_load(fp)

@@ -6,8 +6,8 @@
   run_parameters.models.apy.TrivialEwmPredictor.params.cap: 3
   run_parameters.models.apy.TrivialEwmPredictor.params.halflife: 10d
   run_parameters.models.apy.TrivialEwmPredictor.params.horizon: 28d
-  strategy.base_buffer: 0.2
-  strategy.concentration_limit: 0.8
+  strategy.base_buffer: 0.05
+  strategy.concentration_limit: 0.25
   strategy.cost: 0.0005
-  strategy.gas: 50
+  strategy.gas: 1
   strategy.initial_wealth: 1000000.0

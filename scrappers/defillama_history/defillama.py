@@ -100,7 +100,7 @@ class FilteredDefiLlama(DefiLlama):
         self.oracle = oracle
         self.use_oracle = use_oracle
         self.reference_asset = reference_asset
-        self.sql_api: SqlApi = SqlApi(st.secrets[database], pool_size=pool_size, max_overflow=max_overflow, pool_recycle=pool_recycle)
+        self.sql_api: SqlApi = SqlApi(database, pool_size=pool_size, max_overflow=max_overflow, pool_recycle=pool_recycle)
         self.connection: Connection = self.sql_api.engine.connect()
 
         self.all_protocol = self.get_protocols()

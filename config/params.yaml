@@ -11,8 +11,8 @@ input_data:
     pool_tvl_threshold: 10e6
     use_oracle: false
   async:
-    gather_limit: 1
-    pool_size: 2
+    gather_limit: 10
+    pool_size: 10
     max_overflow: 20
     pool_recycle: 3600
 run_parameters:

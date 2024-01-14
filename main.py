@@ -1,5 +1,5 @@
+import html
 import os
-from copy import copy
 from datetime import timedelta, date
 
 import pandas as pd
@@ -54,7 +54,7 @@ with initialize_tab:
             with st.form("filter_form"):
                 underlyings_col, protocols_col, pool_col = st.columns([20, 20, 20])
                 with underlyings_col:
-                    st.write("### Underlying filter")
+                    st.subheader("Underlying filter", divider='grey')
                     underlying_candidates = pd.DataFrame(
                         {'symbol': FilteredDefiLlama.pegged_symbols[reference_asset]})
                     underlying_candidates['selected'] = True
@@ -62,10 +62,10 @@ with initialize_tab:
                                                  use_container_width=True, hide_index=True)
                     underlyings = underlyings[underlyings['selected']]['symbol'].tolist()
                 with protocols_col:
-                    st.write("### Protocol filter")
+                    st.subheader("Protocol filter", divider='grey')
                     protocol_filters = prompt_protocol_filtering(all_categories=st.session_state.all_categories)
                 with pool_col:
-                    st.write("### Pool filter")
+                    st.subheader("Pool filter", divider='grey')
                     pool_filters = prompt_pool_filtering()
 
                 if validate_form_pressed := st.form_submit_button("Validate underlyings and protocols"):
@@ -82,12 +82,12 @@ with initialize_tab:
             with st.form("whitelist_form"):
                 upload_col, pool_col = st.columns([20, 20])
                 with upload_col:
-                    st.write("### Upload")
+                    st.subheader("Upload", divider='grey')
                     whitelist_file = st.file_uploader(
                             "Upload a set of whitelisted underlyings and protocols (download template above)",
                             type=['yaml'], key='whitelist_file')
                 with pool_col:
-                    st.write("### Pool filter")
+                    st.subheader("Pool filter", divider='grey')
                     pool_filters = prompt_pool_filtering()
 
                 if whitelist_form_pressed := st.form_submit_button("Validate whitelist"):
@@ -182,8 +182,13 @@ with backtest_tab:
                     progress_bar1.progress(value=1., text='Completed grid')
                     st.session_state.stage = 5
                 else:
-                    with st.sidebar.expander("Expand me"):
-                        authentification_sidebar()
+                    st.warning(
+                        html.unescape(
+                            'chat https://t.me/daviddarr, then enter your tg handle in the sidebar to get access'
+                        )
+                    )
+        st.subheader("Backtest grid", divider='grey')
+        st.json(override_grid)
 
 with analytics_tab:
     if (st.session_state.stage >= 5) and (selected_run := st.selectbox('Select run name', st.session_state.result['runs'].keys())):

@@ -19,10 +19,11 @@ class SqlApi:
                        'apyReward': Float,
                        'il': Float,
                        'tvl': Float}
-        self.engine: Engine = create_engine(database,
-                                            pool_size=pool_size,
-                                            max_overflow=max_overflow,
-                                            pool_recycle=pool_recycle)
+        self.engine = st.connection(database, type="sql", autocommit=True)
+        # self.engine: Engine = create_engine(database,
+        #                                     pool_size=pool_size,
+        #                                     max_overflow=max_overflow,
+        #                                     pool_recycle=pool_recycle)
         self.tables: list = self.list_tables()
 
     #@st.cache_data
@@ -66,8 +67,7 @@ class SqlApi:
 
     def write_metadata(self, data: pd.DataFrame):
         with self.engine.connect() as connection:
-            data[~data.index.duplicated()].to_sql(name='metadata', con=connection, if_exists='replace', index=False,
-                                          dtype=self.schema)
+            data[~data.index.duplicated()].to_sql(name='metadata', con=connection, if_exists='replace', index=False)
         return "updated metadata"
 
     async def last_updated(self, metadata: dict, prev_metadata: pd.DataFrame) -> datetime:
@@ -76,23 +76,20 @@ class SqlApi:
             return result if type(result) == pd.Timestamp else result.max()
         if metadata['name'] in self.tables:
             query = f'''SELECT MAX(updated) FROM \"{metadata['name']}\";'''
-            with self.engine.connect() as con:
-                result = await async_wrap(pd.read_sql_query)(sql_text(query), con=con)
+            result = await async_wrap(self.read_sql_query)(query)
             return result.squeeze() if type(result.squeeze()) == pd.Timestamp else result.max().squeeze()
-        else:
-            return None
 
     def delete(self, tables: list[str] = None):
         metadata = MetaData()
-        metadata.reflect(self.engine)
+        metadata.reflect(self.engine.engine)
         if tables is None:
-            metadata.drop_all(bind=self.engine)
+            metadata.drop_all(bind=self.engine.engine)
         else:
-            metadata.drop_all(bind=self.engine, tables=list(map(metadata.tables.get, tables)))
+            metadata.drop_all(bind=self.engine.engine, tables=list(map(metadata.tables.get, tables)))
 
     def list_tables(self):
         meta = MetaData()
-        meta.reflect(bind=self.engine)
+        meta.reflect(bind=self.engine.engine)
         return list(meta.tables)
 
 if __name__ == '__main__':
