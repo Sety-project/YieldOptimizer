@@ -17,7 +17,6 @@ coingecko = myCoinGeckoAPI()
 with st.spinner('fetching meta data'):
     coingecko.address_map = coingecko.get_address_map()
 
-
 def check_whitelist():
     if st.session_state.user_tg_handle in st.secrets.whitelist:
         st.session_state.authentification = "verified"
@@ -34,7 +33,7 @@ def check_whitelist():
 
 def authentification_sidebar():
     st.session_state.authentification = "unverified"
-    st.session_state.user_tg_handle = st.sidebar.text_input("Enter your tg handle to backtest:")
+    st.sidebar.text_input("Enter your tg handle to backtest:", key='user_tg_handle')
     if st.session_state.authentification != "verified":
         check_whitelist()
     if (
@@ -51,6 +50,14 @@ def authentification_sidebar():
             "upload parameters", type=['yaml']
         ):
             st.session_state.parameters = yaml.safe_load(parameter_file)
+        else:
+            with open(os.path.join(os.sep, os.getcwd(), "config", 'params.yaml'), 'r') as fp:
+                st.session_state.parameters = yaml.safe_load(fp)
+    else:
+        with open(os.path.join(os.sep, os.getcwd(), "config", 'params.yaml'), 'r') as fp:
+            st.session_state.parameters = yaml.safe_load(fp)
+    st.write('## session parameters')
+    st.sidebar.json(st.session_state.parameters)
 
 def prompt_initialization():
     def reset():
