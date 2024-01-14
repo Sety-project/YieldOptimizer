@@ -9,7 +9,7 @@ import yaml
 from scrappers.defillama_history.defillama import FilteredDefiLlama
 from strategies.vault_backtest import VaultBacktestEngine
 from utils.io_utils import extract_from_paths, get_date_or_timedelta
-from utils.streamlit_utils import download_grid_template_button, \
+from utils.streamlit_utils import download_grid_button, \
     display_single_backtest, download_whitelist_template_button, MyProgressBar, prettify_metadata, \
     authentification_sidebar, coingecko, prompt_initialization, prompt_protocol_filtering, prompt_pool_filtering
 
@@ -139,7 +139,7 @@ with initialize_tab:
 
 with backtest_tab:
     if st.session_state.stage >= 4:
-        download_grid_template_button()
+        download_grid_button()
 
         with st.form("backtest_form"):
             st.session_state.parameters['backtest']['end_date'] = date.today().isoformat()
@@ -158,13 +158,15 @@ with backtest_tab:
                                                            "backtest.start_date"])
 
             override_grid = None
-            if uploaded_file := st.file_uploader("Upload a set of backtest parameters (download template above)", type=['csv']):
-                override_grid = pd.read_csv(uploaded_file, index_col=0).to_dict(orient='records')
+            if uploaded_file := st.file_uploader("Upload a set of backtest parameters (download template above)", type=['yaml']):
+                override_grid = yaml.safe_load(uploaded_file)
                 # sorry hack...
                 for record in override_grid:
-                    record['label_map.apy.horizons'] = eval(record['label_map.apy.horizons'])
                     record['backtest.end_date'] = get_date_or_timedelta(record['backtest.end_date'], ref_date=date.today())
                     record['backtest.start_date'] = get_date_or_timedelta(record['backtest.start_date'], ref_date=record['backtest.end_date'])
+            else:
+                with open(os.path.join(os.sep, os.getcwd(), "config", 'grid.yaml'), 'r') as uploaded_file:
+                    override_grid = yaml.safe_load(uploaded_file)
 
             if st.form_submit_button("Run backtest") and override_grid is not None:
                 if st.session_state.authentification == 'verified':
@@ -172,7 +174,7 @@ with backtest_tab:
                     progress_bar2 = st.progress(value=0.0, text='Running backtest...')
 
                     st.session_state.result = VaultBacktestEngine.run_grid(parameter_grid=override_grid,
-                                                                           parameters=parameters,
+                                                                           parameters=st.session_state.parameters,
                                                                            data=
                                                                            st.session_state.all_history,
                                                                            progress_bar1=progress_bar1,

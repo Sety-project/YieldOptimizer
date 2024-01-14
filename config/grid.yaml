@@ -1,0 +1,13 @@
+- 'run0':
+  backtest.end_date: '2024-01-13'
+  backtest.start_date: '2023-10-15'
+  label_map.apy.horizons:
+    - 28
+  run_parameters.models.apy.TrivialEwmPredictor.params.cap: 3
+  run_parameters.models.apy.TrivialEwmPredictor.params.halflife: 10d
+  run_parameters.models.apy.TrivialEwmPredictor.params.horizon: 28d
+  strategy.base_buffer: 0.2
+  strategy.concentration_limit: 0.8
+  strategy.cost: 0.0005
+  strategy.gas: 50
+  strategy.initial_wealth: 1000000.0

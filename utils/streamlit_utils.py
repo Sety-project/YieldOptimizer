@@ -1,4 +1,5 @@
 import html
+import os
 import threading
 from copy import deepcopy
 from datetime import date, timedelta
@@ -121,65 +122,18 @@ def prettify_metadata(input_df: pd.DataFrame) -> pd.DataFrame:
     return meta_df
 
 
-def download_grid_template_button() -> None:
-    # button to download grid template
-    pd.DataFrame(
-        columns=['strategy.initial_wealth',
-                 'run_parameters.models.apy.TrivialEwmPredictor.params.cap',
-                 'run_parameters.models.apy.TrivialEwmPredictor.params.halflife',
-                 'strategy.cost',
-                 'strategy.gas',
-                 'strategy.base_buffer',
-                 "run_parameters.models.apy.TrivialEwmPredictor.params.horizon",
-                 "label_map.apy.horizons",
-                 "strategy.concentration_limit",
-                 "backtest.end_date",
-                 "backtest.start_date"],
-        index=[0, 1],
-        data=[[1e6, 3, '10d', 5e-4, 50, .2, '28d', [28], .8, date.today().isoformat(), (date.today() - timedelta(days=90)).isoformat()],
-              [7e6, 3, '10d', 5e-4, 50, .1, '28d', [28], .4, date.today().isoformat(), (date.today() - timedelta(days=90)).isoformat()]]
-    ).to_csv('grid_template.csv')
-    with open('grid_template.csv', "rb") as download_file:
+def download_grid_button() -> None:
+    with open(os.path.join(os.sep, os.getcwd(), "config", 'grid.yaml'), "r") as download_file:
         st.download_button(
             label="Download backtest grid template",
             data=download_file,
-            file_name='grid_template.csv',
-            mime='text/csv',
+            file_name='grid.yaml',
+            mime='text/yaml',
         )
 
 def download_whitelist_template_button(underlyings_candidates: list[str]) -> None:
     # button to download grid template
-    with open('whitelist_template.yaml', mode='w') as writer:
-        yaml.dump({'underlyings': underlyings_candidates,
-                   'protocols': ['curve-dex',
-                                 'balancer',
-                                 'pancakeswap-amm',
-                                 'venus-isolated-pools',
-                                 'lido',
-                                 'aave-v2',
-                                 'morpho-aavev3',
-                                 'uniswap-v2',
-                                 'thena-v1',
-                                 'morpho-compoundcompound-v3',
-                                 'morpho-aave',
-                                 'curve-finance',
-                                 'convex-finance',
-                                 'compound',
-                                 'frax-ether',
-                                 'aura',
-                                 'venus-core-pool',
-                                 'aave-v3',
-                                 'uniswap-v3',
-                                 'stargate',
-                                 'makerdao',
-                                 'balancer-v2',
-                                 'rocket-pool',
-                                 'pancakeswap-amm-v3',
-                                 'spark'
-                                 ]
-                   },
-                  writer)
-    with open('whitelist_template.yaml', "r") as download_file:
+    with open(os.path.join(os.sep, os.getcwd(), "config", 'whitelist.yaml'), "r") as download_file:
         st.download_button(
             label="Download backtest grid template",
             data=download_file,
