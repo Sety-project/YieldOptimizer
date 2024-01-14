@@ -17,6 +17,7 @@ coingecko = myCoinGeckoAPI()
 with st.spinner('fetching meta data'):
     coingecko.address_map = coingecko.get_address_map()
 
+
 def check_whitelist():
     if st.session_state.user_tg_handle in st.secrets.whitelist:
         st.session_state.authentification = "verified"
@@ -53,11 +54,12 @@ def authentification_sidebar():
         else:
             with open(os.path.join(os.sep, os.getcwd(), "config", 'params.yaml'), 'r') as fp:
                 st.session_state.parameters = yaml.safe_load(fp)
+            st.write('## session parameters')
+            st.sidebar.json(st.session_state.parameters)
     else:
         with open(os.path.join(os.sep, os.getcwd(), "config", 'params.yaml'), 'r') as fp:
             st.session_state.parameters = yaml.safe_load(fp)
-    st.write('## session parameters')
-    st.sidebar.json(st.session_state.parameters)
+
 
 def prompt_initialization():
     def reset():
@@ -138,6 +140,7 @@ def download_grid_button() -> None:
             mime='text/yaml',
         )
 
+
 def download_whitelist_template_button(underlyings_candidates: list[str]) -> None:
     # button to download grid template
     with open(os.path.join(os.sep, os.getcwd(), "config", 'whitelist.yaml'), "r") as download_file:
@@ -147,6 +150,7 @@ def download_whitelist_template_button(underlyings_candidates: list[str]) -> Non
             file_name='whitelist_template.yaml',
             mime='text/yaml',
         )
+
 
 def display_single_backtest(backtest: pd.DataFrame) -> None:
     height = 1000
@@ -218,6 +222,7 @@ def display_backtest_grid(grid):
         display_heatmap(metrics, ind, col, filtering)
     except Exception as e:
         st.write(str(e))
+
 
 class MyProgressBar:
     '''A progress bar with increment progress (why did i have to do that...)'''
