@@ -11,18 +11,18 @@ from strategies.vault_backtest import VaultBacktestEngine
 from utils.io_utils import extract_from_paths, get_date_or_timedelta
 from utils.streamlit_utils import download_grid_template_button, \
     display_single_backtest, download_whitelist_template_button, MyProgressBar, prettify_metadata, \
-    authentification_sidebar, coingecko, prompt_initialization, prompt_protocol_filtering, prompt_pool_filtering, \
-    check_whitelist
+    authentification_sidebar, coingecko, prompt_initialization, prompt_protocol_filtering, prompt_pool_filtering
 
 pd.options.mode.chained_assignment = None
 
 st.title('Yield optimizer backtest \n by Sety')
 
-authentification_sidebar()
-
 # load default parameters from yaml
 with open(os.path.join(os.sep, os.getcwd(), "config", 'params.yaml'), 'r') as fp:
-    parameters = yaml.safe_load(fp)
+    st.session_state.parameters = yaml.safe_load(fp)
+
+authentification_sidebar()
+# parameters_override = st.sidebar.data_editor(st.session_state.parameters, use_container_width=True, height=1000, key='parameters')
 
 initialize_tab, backtest_tab, analytics_tab, grid_tab, execution_tab = st.tabs(
     ["pool selection", "backtest", "backtest analytics", "grid analytics", "execution helper"])
@@ -37,8 +37,12 @@ with initialize_tab:
         st.session_state.defillama = FilteredDefiLlama(reference_asset=reference_asset,
                                                        chains=chains,
                                                        oracle=coingecko,
-                                                       database=parameters['input_data'][
+                                                       database=st.session_state.parameters['input_data'][
                                                            'database'],
+                                                       pool_size=st.session_state.parameters['input_data']['async']['pool_size'],
+                                                       max_overflow=st.session_state.parameters['input_data']['async'][
+                                                           'max_overflow'],
+                                                       pool_recycle=st.session_state.parameters['input_data']['async']['pool_recycle'],
                                                        use_oracle=use_oracle)
         st.session_state.all_categories = list(st.session_state.defillama.protocols['category'].dropna().unique())
         st.session_state.stage = 1
@@ -81,7 +85,7 @@ with initialize_tab:
                     st.write("### Upload")
                     whitelist_file = st.file_uploader(
                             "Upload a set of whitelisted underlyings and protocols (download template above)",
-                            type=['xls'])
+                            type=['yaml'], key='whitelist_file')
                 with pool_col:
                     st.write("### Pool filter")
                     pool_filters = prompt_pool_filtering()
@@ -91,14 +95,10 @@ with initialize_tab:
                         st.write("Please upload a whitelist")
                         whitelist_form_pressed = False
                     else:
-                        underlyings = pd.read_excel(whitelist_file, sheet_name='underlyings')[
-                            'underlyings'].tolist()
-                        protocol_filters = {
-                            'selected_protocols': pd.read_excel(whitelist_file, sheet_name='protocols')[
-                                'protocols'].unique()}
+                        whitelist = yaml.safe_load(whitelist_file)
                         st.session_state.defillama.filter(
-                            underlyings=underlyings,
-                            protocol_filters=protocol_filters,
+                            underlyings=whitelist['underlyings'],
+                            protocol_filters={'selected_protocols': whitelist['protocols']},
                             pool_filters=pool_filters)
                         st.write(
                             f"found {len(st.session_state.defillama.pools)} pools among {len(st.session_state.defillama.protocols)} protocols")
@@ -118,7 +118,7 @@ with initialize_tab:
 
                 progress_bar = MyProgressBar(value=0.0,
                                              length=st.session_state.defillama.pools.shape[0],
-                                             text=f"Fetching data from {parameters['input_data']['database']}")
+                                             text=f"Fetching data from {st.session_state.parameters['input_data']['database']}")
                 fetch_summary = {}
                 st.session_state.all_history = st.session_state.defillama.refresh_apy_history(fetch_summary=fetch_summary, progress_bar=progress_bar)
                 st.session_state.stage = 4
@@ -142,9 +142,9 @@ with backtest_tab:
         download_grid_template_button()
 
         with st.form("backtest_form"):
-            parameters['backtest']['end_date'] = date.today().isoformat()
-            parameters['backtest']['start_date'] = (date.today() - timedelta(days=90)).isoformat()
-            default_parameters = extract_from_paths(target=parameters,
+            st.session_state.parameters['backtest']['end_date'] = date.today().isoformat()
+            st.session_state.parameters['backtest']['start_date'] = (date.today() - timedelta(days=90)).isoformat()
+            default_parameters = extract_from_paths(target=st.session_state.parameters,
                                                     paths=['strategy.initial_wealth',
                                                            'run_parameters.models.apy.TrivialEwmPredictor.params.cap',
                                                            'run_parameters.models.apy.TrivialEwmPredictor.params.halflife',
@@ -181,9 +181,7 @@ with backtest_tab:
                     st.session_state.stage = 5
                 else:
                     with st.sidebar.expander("Expand me"):
-                        st.session_state.user_tg_handle = st.sidebar.text_input("Enter your tg handle to backtest:")
-                        if st.session_state.authentification != "verified":
-                            check_whitelist()
+                        authentification_sidebar()
 
 with analytics_tab:
     if (st.session_state.stage >= 5) and (selected_run := st.selectbox('Select run name', st.session_state.result['runs'].keys())):

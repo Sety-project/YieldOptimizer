@@ -6,6 +6,7 @@ from datetime import date, timedelta
 import numpy as np
 import pandas as pd
 import streamlit as st
+import yaml
 from plotly import express as px
 
 from scrappers.defillama_history.coingecko import myCoinGeckoAPI
@@ -42,7 +43,13 @@ def authentification_sidebar():
         db = SqlApi(st.secrets[st.session_state.db_delete])
         db.delete()
         st.caption(f"deleted {len(db.list_tables())} from {st.session_state.db_delete}")
-
+    if (
+            st.session_state.user_tg_handle in st.secrets.admins
+    ):
+        if parameter_file := st.sidebar.file_uploader(
+            "upload parameters", type=['yaml']
+        ):
+            st.session_state.parameters = yaml.safe_load(parameter_file)
 
 def prompt_initialization():
     def reset():
@@ -142,43 +149,42 @@ def download_grid_template_button() -> None:
 
 def download_whitelist_template_button(underlyings_candidates: list[str]) -> None:
     # button to download grid template
-    underlyings = pd.DataFrame({'underlyings': underlyings_candidates})
-    protocols = pd.DataFrame(
-        {'protocols': ['curve-dex',
-                       'balancer',
-                       'pancakeswap-amm',
-                       'venus-isolated-pools',
-                       'lido',
-                       'aave-v2',
-                       'morpho-aavev3',
-                       'uniswap-v2',
-                       'thena-v1',
-                       'morpho-compoundcompound-v3',
-                       'morpho-aave',
-                       'curve-finance',
-                       'convex-finance',
-                       'compound',
-                       'frax-ether',
-                       'aura',
-                       'venus-core-pool',
-                       'aave-v3',
-                       'uniswap-v3',
-                       'stargate',
-                       'makerdao',
-                       'balancer-v2',
-                       'rocket-pool',
-                       'pancakeswap-amm-v3',
-                       'spark'
-                       ]})
-    with pd.ExcelWriter('whitelist_template.xls', engine='xlsxwriter', mode='w') as writer:
-        underlyings.to_excel(writer, sheet_name='underlyings', index=False)
-        protocols.to_excel(writer, sheet_name='protocols', index=False)
-    with open('whitelist_template.xls', "rb") as download_file:
+    with open('whitelist_template.yaml', mode='w') as writer:
+        yaml.dump({'underlyings': underlyings_candidates,
+                   'protocols': ['curve-dex',
+                                 'balancer',
+                                 'pancakeswap-amm',
+                                 'venus-isolated-pools',
+                                 'lido',
+                                 'aave-v2',
+                                 'morpho-aavev3',
+                                 'uniswap-v2',
+                                 'thena-v1',
+                                 'morpho-compoundcompound-v3',
+                                 'morpho-aave',
+                                 'curve-finance',
+                                 'convex-finance',
+                                 'compound',
+                                 'frax-ether',
+                                 'aura',
+                                 'venus-core-pool',
+                                 'aave-v3',
+                                 'uniswap-v3',
+                                 'stargate',
+                                 'makerdao',
+                                 'balancer-v2',
+                                 'rocket-pool',
+                                 'pancakeswap-amm-v3',
+                                 'spark'
+                                 ]
+                   },
+                  writer)
+    with open('whitelist_template.yaml', "r") as download_file:
         st.download_button(
             label="Download backtest grid template",
             data=download_file,
-            file_name='whitelist_template.xls',
-            mime='text/xls',
+            file_name='whitelist_template.yaml',
+            mime='text/yaml',
         )
 
 def display_single_backtest(backtest: pd.DataFrame) -> None:

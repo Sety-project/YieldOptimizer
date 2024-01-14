@@ -8,19 +8,21 @@ from sqlalchemy import Float, DateTime, Connection, Engine
 from sqlalchemy import create_engine, inspect, MetaData, Table
 from sqlalchemy import text as sql_text
 
-from utils.async_utils import async_wrap, safe_gather_limit
+from utils.async_utils import async_wrap
 
 
 class SqlApi:
-    def __init__(self, database: str, schema=None):
-        if schema is None:
-            self.schema = {'date': DateTime(timezone=True),
-                           'haircut_apy': Float,
-                           'apy': Float,
-                           'apyReward': Float,
-                           'il': Float,
-                           'tvl': Float}
-        self.engine: Engine = create_engine(database, pool_size=min(20, safe_gather_limit), max_overflow=20, pool_recycle=3600)
+    def __init__(self, database: str, pool_size: int, max_overflow: int = 20, pool_recycle: int = 3600):
+        self.schema = {'date': DateTime(timezone=True),
+                       'haircut_apy': Float,
+                       'apy': Float,
+                       'apyReward': Float,
+                       'il': Float,
+                       'tvl': Float}
+        self.engine: Engine = create_engine(database,
+                                            pool_size=pool_size,
+                                            max_overflow=max_overflow,
+                                            pool_recycle=pool_recycle)
         self.tables: list = self.list_tables()
 
     #@st.cache_data

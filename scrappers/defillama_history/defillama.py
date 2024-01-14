@@ -88,16 +88,19 @@ class FilteredDefiLlama(DefiLlama):
                       'eth': ['weth', 'eth', 'steth', 'wsteth', 'reth', 'reth2', 'frxeth', 'sfrxeth', 'sweth', 'cbeth',
                               'oeth'],
                       'btc': ['wbtc']}
+
     def __init__(self, reference_asset: str, chains: list[str], oracle,
                  database: str,
-                 use_oracle: bool = False):
+                 pool_size: int, max_overflow: int = 20, pool_recycle: int = 3600,
+                 use_oracle: bool = False,
+                 ):
         self.logger = logging.getLogger('defillama_history')
         super().__init__()
         self.chains = chains
         self.oracle = oracle
         self.use_oracle = use_oracle
         self.reference_asset = reference_asset
-        self.sql_api: SqlApi = SqlApi(st.secrets[database])
+        self.sql_api: SqlApi = SqlApi(st.secrets[database], pool_size=pool_size, max_overflow=max_overflow, pool_recycle=pool_recycle)
         self.connection: Connection = self.sql_api.engine.connect()
 
         self.all_protocol = self.get_protocols()
@@ -243,7 +246,7 @@ class FilteredDefiLlama(DefiLlama):
                                       connection=connection,
                                       fetch_summary=fetch_summary,
                                       progress_bar=progress_bar) for meta in metadata]
-            data = asyncio.run(safe_gather(coros))
+            data = asyncio.run(safe_gather(coros, n=st.session_state.parameters['input_data']['async']['gather_limit']))
             self.pools['updated'] = self.pools['name'].apply(lambda pool: fetch_summary[pool][1])
             self.sql_api.write_metadata(self.pools)
 
