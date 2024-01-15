@@ -9,7 +9,6 @@ import yaml
 from plotly import express as px
 
 from scrappers.defillama_history.coingecko import myCoinGeckoAPI
-from utils.postgres import SqlApi
 from utils.telegram_bot import check_whitelist
 
 coingecko = myCoinGeckoAPI()
