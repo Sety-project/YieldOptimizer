@@ -10,42 +10,48 @@ from plotly import express as px
 
 from scrappers.defillama_history.coingecko import myCoinGeckoAPI
 from utils.postgres import SqlApi
-from utils.telegram_bot import check_whitelist
 
 coingecko = myCoinGeckoAPI()
 with st.spinner('fetching meta data'):
     coingecko.address_map = coingecko.get_address_map()
 
 
-def authentification_sidebar():
-    if 'authentification' not in st.session_state:
-        st.session_state.authentification = "unverified"
-    if st.sidebar.text_input("Enter your tg handle to backtest:", key='user_tg_handle'):
-        if st.session_state.authentification != "verified":
-            check_whitelist(st.session_state.user_tg_handle)
-            st.session_state.authentification = "verified"
-
-        if st.session_state.user_tg_handle in st.secrets.admins and st.sidebar.text_input("DB to reset (don't !)", key='db_delete'):
-            st.session_state.database.delete()
-            st.caption(f"deleted {len(st.session_state.database.list_tables())} from {st.session_state.db_delete}")
-
-
-def load_parameters() -> dict:
-    if parameter_file := st.sidebar.file_uploader("upload parameters", type=['yaml']):
-        result = yaml.safe_load(parameter_file)
-    elif 'parameters' not in st.session_state:
-        with open(os.path.join(os.sep, os.getcwd(), "config", 'params.yaml'), 'r') as fp:
-            result = yaml.safe_load(fp)
+def check_whitelist():
+    if st.session_state.user_tg_handle in st.secrets.whitelist:
+        st.session_state.authentification = "verified"
+        st.sidebar.success(f'logged in as {st.session_state.user_tg_handle}')
     else:
-        result = st.session_state.parameters
+        st.session_state.authentification = "incorrect"
+    st.session_state.password = ""
 
-    return result
 
-
-def parameter_override():
-    st.sidebar.subheader("Session parameters", divider='grey')
-    st.sidebar.json(st.session_state.parameters)
-    # parameters_override = st.sidebar.data_editor(st.session_state.parameters, use_container_width=True, height=1000, key='parameters')
+def authentification_sidebar():
+    st.session_state.authentification = "unverified"
+    st.sidebar.text_input("Enter your tg handle to backtest:", key='user_tg_handle')
+    if st.session_state.authentification != "verified":
+        check_whitelist()
+    if (
+        st.session_state.user_tg_handle in st.secrets.admins
+        and st.sidebar.text_input("DB to reset (don't !)", key='db_delete')
+    ):
+        db = SqlApi(st.secrets[st.session_state.db_delete])
+        db.delete()
+        st.caption(f"deleted {len(db.list_tables())} from {st.session_state.db_delete}")
+    if (
+            st.session_state.user_tg_handle in st.secrets.admins
+    ):
+        if parameter_file := st.sidebar.file_uploader(
+            "upload parameters", type=['yaml']
+        ):
+            st.session_state.parameters = yaml.safe_load(parameter_file)
+        else:
+            with open(os.path.join(os.sep, os.getcwd(), "config", 'params.yaml'), 'r') as fp:
+                st.session_state.parameters = yaml.safe_load(fp)
+        st.sidebar.subheader("Session parameters", divider='grey')
+        st.sidebar.json(st.session_state.parameters)
+    else:
+        with open(os.path.join(os.sep, os.getcwd(), "config", 'params.yaml'), 'r') as fp:
+            st.session_state.parameters = yaml.safe_load(fp)
 
 
 def prompt_initialization():

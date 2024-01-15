@@ -12,14 +12,14 @@ from utils.async_utils import async_wrap
 
 
 class SqlApi:
-    def __init__(self, name: str, pool_size: int, max_overflow: int = 20, pool_recycle: int = 3600):
+    def __init__(self, database: str, pool_size: int, max_overflow: int = 20, pool_recycle: int = 3600):
         self.schema = {'date': DateTime(timezone=True),
                        'haircut_apy': Float,
                        'apy': Float,
                        'apyReward': Float,
                        'il': Float,
                        'tvl': Float}
-        self.engine = st.connection(name, type="sql", autocommit=True)
+        self.engine = st.connection(database, type="sql", autocommit=True)
         # self.engine: Engine = create_engine(database,
         #                                     pool_size=pool_size,
         #                                     max_overflow=max_overflow,
@@ -78,23 +78,6 @@ class SqlApi:
             query = f'''SELECT MAX(updated) FROM \"{metadata['name']}\";'''
             result = await async_wrap(self.read_sql_query)(query)
             return result.squeeze() if type(result.squeeze()) == pd.Timestamp else result.max().squeeze()
-
-    def is_whitelisted(self, tg_username: str) -> bool:
-        if 'interactions' not in self.tables:
-            with self.engine.session as connection:
-                connection.execute(sql_text(
-                    "CREATE TABLE interactions (username VARCHAR(255), timestamp TIMESTAMP WITH TIME ZONE, message VARCHAR(255));")
-                )
-                connection.commit()
-            return False
-        query = f'''SELECT username FROM interactions WHERE username = '{tg_username}';'''
-        result = self.read_sql_query(query)
-        return not result.empty
-
-    def record_interaction(self, tg_username: str, timestamp: datetime, message: str):
-        with self.engine.session as connection:
-            connection.execute(sql_text(f"INSERT INTO interactions (username, timestamp, message) VALUES ('{tg_username}', '{timestamp}', '{message}')"))
-            connection.commit()
 
     def delete(self, tables: list[str] = None):
         metadata = MetaData()
