@@ -9,20 +9,23 @@ import yaml
 from scrappers.defillama_history.defillama import FilteredDefiLlama
 from strategies.vault_backtest import VaultBacktestEngine
 from utils.io_utils import extract_from_paths, get_date_or_timedelta
+from utils.postgres import SqlApi
 from utils.streamlit_utils import download_grid_button, \
     display_single_backtest, download_whitelist_template_button, MyProgressBar, prettify_metadata, \
-    authentification_sidebar, coingecko, prompt_initialization, prompt_protocol_filtering, prompt_pool_filtering
+    authentification_sidebar, coingecko, prompt_initialization, prompt_protocol_filtering, prompt_pool_filtering, \
+    load_parameters, parameter_override
 
 pd.options.mode.chained_assignment = None
 
 st.title('Yield optimizer backtest \n by Sety')
 
-# load default parameters from yaml
-with open(os.path.join(os.sep, os.getcwd(), "config", 'params.yaml'), 'r') as fp:
-    st.session_state.parameters = yaml.safe_load(fp)
-
+st.session_state.parameters = load_parameters()
+st.session_state.database = SqlApi(name=st.session_state.parameters['input_data']['database'],
+                  pool_size=st.session_state.parameters['input_data']['async']['pool_size'],
+                  max_overflow=st.session_state.parameters['input_data']['async']['max_overflow'],
+                  pool_recycle=st.session_state.parameters['input_data']['async']['pool_recycle'])
 authentification_sidebar()
-# parameters_override = st.sidebar.data_editor(st.session_state.parameters, use_container_width=True, height=1000, key='parameters')
+parameter_override()
 
 initialize_tab, backtest_tab, analytics_tab, grid_tab, execution_tab = st.tabs(
     ["pool selection", "backtest", "backtest analytics", "grid analytics", "execution helper"])
@@ -37,12 +40,7 @@ with initialize_tab:
         st.session_state.defillama = FilteredDefiLlama(reference_asset=reference_asset,
                                                        chains=chains,
                                                        oracle=coingecko,
-                                                       database=st.session_state.parameters['input_data'][
-                                                           'database'],
-                                                       pool_size=st.session_state.parameters['input_data']['async']['pool_size'],
-                                                       max_overflow=st.session_state.parameters['input_data']['async'][
-                                                           'max_overflow'],
-                                                       pool_recycle=st.session_state.parameters['input_data']['async']['pool_recycle'],
+                                                       database=st.session_state.database,
                                                        use_oracle=use_oracle)
         st.session_state.all_categories = list(st.session_state.defillama.protocols['category'].dropna().unique())
         st.session_state.stage = 1
@@ -184,7 +182,7 @@ with backtest_tab:
                 else:
                     st.warning(
                         html.unescape(
-                            'chat https://t.me/daviddarr, then enter your tg handle in the sidebar to get access'
+                            'chat https://t.me/Pronoia_Bot, then enter your tg handle in the sidebar to get access'
                         )
                     )
         st.subheader("Backtest grid", divider='grey')

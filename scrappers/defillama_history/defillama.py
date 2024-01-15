@@ -90,8 +90,7 @@ class FilteredDefiLlama(DefiLlama):
                       'btc': ['wbtc']}
 
     def __init__(self, reference_asset: str, chains: list[str], oracle,
-                 database: str,
-                 pool_size: int, max_overflow: int = 20, pool_recycle: int = 3600,
+                 database: SqlApi,
                  use_oracle: bool = False,
                  ):
         self.logger = logging.getLogger('defillama_history')
@@ -100,7 +99,7 @@ class FilteredDefiLlama(DefiLlama):
         self.oracle = oracle
         self.use_oracle = use_oracle
         self.reference_asset = reference_asset
-        self.sql_api: SqlApi = SqlApi(database, pool_size=pool_size, max_overflow=max_overflow, pool_recycle=pool_recycle)
+        self.sql_api: SqlApi = database
         self.connection: Connection = self.sql_api.engine.connect()
 
         self.all_protocol = self.get_protocols()
