@@ -20,8 +20,7 @@ def authentification_sidebar():
     if 'authentification' not in st.session_state:
         st.session_state.authentification = "unverified"
     if st.sidebar.text_input("Enter your tg handle to backtest:", key='user_tg_handle'):
-        if st.session_state.authentification != "verified":
-            check_whitelist(st.session_state.user_tg_handle)
+        if st.session_state.authentification != "verified" and check_whitelist(st.session_state.user_tg_handle):
             st.session_state.authentification = "verified"
 
         if st.session_state.user_tg_handle in st.secrets.admins and st.sidebar.text_input("DB to reset (don't !)", key='db_delete'):
