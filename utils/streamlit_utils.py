@@ -54,9 +54,10 @@ def prompt_initialization():
                               disabled=True, on_change=reset)
     reference_asset = st.selectbox("reference_asset", options=['usd', 'eth', 'btc'],
                                    help="What asset you are investing", on_change=reset)
-    top_chains = coingecko.address_map.count().sort_values(ascending=False)[2:23].index
+
+    top_chains = coingecko.address_map.count().sort_values(ascending=False).index
     chains = st.multiselect("chains", options=top_chains, default=['Arbitrum', 'Optimism', 'Ethereum'],
-                            help="select chains to include in universe", on_change=reset)
+                            help="select chains to include", on_change=reset)
 
     return use_oracle, reference_asset, chains
 
@@ -146,7 +147,7 @@ def display_single_backtest(backtest: pd.DataFrame) -> None:
     apyReward = (backtest['apyReward'] * backtest['weights'].divide(backtest['weights'].sum(axis=1),
                                                                             axis=0)).drop(
         columns='total').reset_index().melt(id_vars='index', var_name='pool', value_name='apy').dropna()
-    apyReward['pool'] = apyReward['pool'].apply(lambda x: f'reward_{x}')
+    apyReward['pool'] = apyReward['pool'].apply(lambda x: f"reward_{x}")
     apy['apy'] = apy['apy'] - apyReward['apy']
     apy = pd.concat([apy, apyReward], axis=0)
     apy['apy'] = apy['apy'] * 100

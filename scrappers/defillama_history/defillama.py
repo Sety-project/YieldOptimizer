@@ -174,21 +174,19 @@ class FilteredDefiLlama(DefiLlama):
     #@cache_data
     async def apy_history(self,
                           metadata: dict,
-                          prev_metadata: pd.DataFrame,
-                          connection: Connection,
-                          fetch_summary: dict,
+                          fetch_summary: dict, # fetch_summary[metadata["name"]] = (message, updated_time)
                           progress_bar: MyProgressBar,
                           **kwargs) -> pd.DataFrame:
         '''gets various components of apy history from defillama
         DB errors may be solved by purging queries at https://console.aiven.io/account/xxxxxxx/project/streamlit/services/streamlit/current-queries'''
 
         # caching #TODO: daily for now
-        last_updated = await self.sql_api.last_updated(metadata, prev_metadata=prev_metadata)
+        last_updated = await self.sql_api.last_updated(metadata)
         if (last_updated is not None
             and last_updated > datetime.now(
                     timezone.utc) - timedelta(days=1)):
             fetch_summary[metadata["name"]] = ('from db', last_updated)
-            progress_bar.increment(text=f'From DB {metadata["name"]}')
+            progress_bar.increment(text=f'From db: {metadata["name"]}')
             return await self.sql_api.read_one(metadata['name'])
 
         # get pool history
@@ -196,8 +194,8 @@ class FilteredDefiLlama(DefiLlama):
             pool_history = await async_wrap(self.get_pool_hist_apy)(metadata['pool'])
         except Exception as e:
             self.logger.warning(f'{metadata["pool"]} {str(e)}')
-            fetch_summary[metadata["name"]] = ('error',None)
-            progress_bar.increment(text=f'error {metadata["name"]}: {str(e)}')
+            fetch_summary[metadata["name"]] = ('error', None)
+            progress_bar.increment(text=f'Error: {metadata["name"]}: {str(e)}')
             return pd.DataFrame()
         if self.use_oracle:
             pool_history = await self.fetch_oracle(metadata, pool_history)
@@ -238,17 +236,13 @@ class FilteredDefiLlama(DefiLlama):
 
     def refresh_apy_history(self, fetch_summary: dict, progress_bar: MyProgressBar) -> FileData:
         metadata = [x.to_dict() for _, x in self.pools.iterrows()]
-        with self.sql_api.engine.connect() as connection:
-            prev_metadata = self.sql_api.read_metadata()
-            coros = [self.apy_history(meta,
-                                      prev_metadata=prev_metadata,
-                                      connection=connection,
-                                      fetch_summary=fetch_summary,
-                                      progress_bar=progress_bar) for meta in metadata]
-            data = asyncio.run(safe_gather(coros, n=st.session_state.parameters['input_data']['async']['gather_limit']))
-            self.pools['updated'] = self.pools['name'].apply(lambda pool: fetch_summary[pool][1])
-            self.sql_api.write_metadata(self.pools)
-
+        coros = [self.apy_history(meta,
+                                  fetch_summary=fetch_summary,
+                                  progress_bar=progress_bar) for meta in metadata]
+        data = asyncio.run(safe_gather(coros, n=st.session_state.parameters['input_data']['async']['gather_limit']))
+        # remove failed pools and update updated_time
+        self.pools = self.pools[self.pools['name'].apply(lambda pool: fetch_summary[pool][0] != 'error')]
+        self.pools['updated'] = self.pools['name'].apply(lambda pool: fetch_summary[pool][1])
         return FileData({key['name']: value for key, value in zip(metadata, data) if not value.empty})
 
     async def fetch_oracle(self, metadata, pool_history):

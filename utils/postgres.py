@@ -1,3 +1,4 @@
+import logging
 import sys
 from datetime import datetime
 from datetime import timezone
@@ -5,12 +6,13 @@ from datetime import timezone
 import pandas as pd
 import streamlit as st
 from sqlalchemy import Float, DateTime, Connection, Engine
-from sqlalchemy import create_engine, inspect, MetaData, Table
+from sqlalchemy import MetaData
 from sqlalchemy import text as sql_text
 
 from utils.async_utils import async_wrap
+from utils.io_utils import profile_all
 
-
+#@profile_all
 class SqlApi:
     def __init__(self, name: str, pool_size: int, max_overflow: int = 20, pool_recycle: int = 3600):
         self.schema = {'date': DateTime(timezone=True),
@@ -46,38 +48,24 @@ class SqlApi:
         if pool in self.list_tables():
             existing_dates = self.read_sql_query(f"""SELECT date FROM \"{pool}\"""")
             new_data = data[~data['date'].isin(existing_dates['date'].apply(lambda t: pd.to_datetime(t, infer_datetime_format=True, utc=True, unit='ns', errors='coerce')))]
-            result = f"Added {new_data.shape[0]} rows to {pool}"
+            result = f"Added: {new_data.shape[0]} rows to {pool}"
         else:
             new_data = data
-            result = f"Created {pool}"
+            result = f"Created: {pool}"
 
         if not new_data.empty:
             new_data['updated'] = datetime.now(timezone.utc)
             with self.engine.connect() as connection:
                 await async_wrap(new_data.to_sql)(name=pool, con=connection, if_exists='append', index=False, dtype=self.schema)
         else:
-            result = f"No new data for {pool}"
+            result = f"No new data: {pool}"
         return result
 
-    def read_metadata(self):
-        if 'metadata' in self.list_tables():
-            query = '''SELECT * FROM metadata;'''
-            return self.read_sql_query(query, index_col='name')
-        return pd.DataFrame()
-
-    def write_metadata(self, data: pd.DataFrame):
-        with self.engine.connect() as connection:
-            data[~data.index.duplicated()].to_sql(name='metadata', con=connection, if_exists='replace', index=False)
-        return "updated metadata"
-
-    async def last_updated(self, metadata: dict, prev_metadata: pd.DataFrame) -> datetime:
-        if (not prev_metadata.empty) and (metadata['name'] in prev_metadata.index):
-            result = prev_metadata.loc[metadata["name"], 'updated']
-            return result if type(result) == pd.Timestamp else result.max()
+    async def last_updated(self, metadata: dict) -> datetime:
         if metadata['name'] in self.tables:
             query = f'''SELECT MAX(updated) FROM \"{metadata['name']}\";'''
             result = await async_wrap(self.read_sql_query)(query)
-            return result.squeeze() if type(result.squeeze()) == pd.Timestamp else result.max().squeeze()
+            return result.squeeze().replace(tzinfo=timezone.utc)
 
     def is_whitelisted(self, tg_username: str) -> bool:
         if 'interactions' not in self.tables:

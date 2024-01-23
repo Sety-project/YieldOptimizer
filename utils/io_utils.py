@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-
 import collections
 import functools
+import os
 import json
 import logging
 from copy import deepcopy
@@ -117,3 +117,10 @@ def profile(filename):
     return decorator
 
 
+def profile_all(cls, filename: str = "profile.txt"):
+    if os.path.isfile(filename):
+        os.remove(filename)
+    for name, method in vars(cls).items():
+        if callable(method) and 'init' not in name:
+            setattr(cls, name, profile(filename)(method))
+    return cls
