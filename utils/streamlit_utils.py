@@ -23,9 +23,12 @@ def authentification_sidebar():
         if st.session_state.authentification != "verified" and check_whitelist(st.session_state.user_tg_handle):
             st.session_state.authentification = "verified"
 
-        if st.session_state.user_tg_handle in st.secrets.admins and st.sidebar.text_input("DB to reset (don't !)", key='db_delete'):
-            st.session_state.database.delete()
-            st.caption(f"deleted {len(st.session_state.database.list_tables())} from {st.session_state.db_delete}")
+        if st.session_state.user_tg_handle in st.secrets.admins:
+            st.sidebar.dataframe(
+                st.session_state.database.read_sql_query(f'''SELECT * FROM interactions ORDER BY timestamp ASC;'''))
+            if st.sidebar.text_input("DB to reset (don't !)", key='db_delete'):
+                st.session_state.database.delete()
+                st.caption(f"deleted {len(st.session_state.database.list_tables())} from {st.session_state.db_delete}")
 
 
 def load_parameters() -> dict:
@@ -49,13 +52,13 @@ def parameter_override():
 def prompt_initialization():
     def reset():
         st.session_state.stage = 0
-    use_oracle = st.selectbox("use_oracle", options=[False, True],
+    use_oracle = st.selectbox("pegged asset price fluctuation as APY", options=[False, True],
                               help="this is for depeg snipping. Please use none for now",
                               disabled=True, on_change=reset)
     reference_asset = st.selectbox("reference_asset", options=['usd', 'eth', 'btc'],
                                    help="What asset you are investing", on_change=reset)
 
-    top_chains = coingecko.address_map.count().sort_values(ascending=False).index
+    top_chains = coingecko.address_map.count().sort_values(ascending=False).index[2:]
     chains = st.multiselect("chains", options=top_chains, default=['Arbitrum', 'Optimism', 'Ethereum'],
                             help="select chains to include", on_change=reset)
 
@@ -67,7 +70,7 @@ def prompt_protocol_filtering(all_categories,
                                              'Farm', 'Synthetics',
                                              'Staking Pool', 'Derivatives', 'Yield Aggregator', 'Insurance',
                                              'Liquidity manager', 'Algo-Stables',
-                                             'Decentralized Stablecoin', 'NFT Lending', 'Leveraged Farming']) -> dict:
+                                             'Decentralized Stablecoin', 'NFT Lending', 'Leveraged Farming', 'Restaking', 'RWA Lending']) -> dict:
     def reset():
         st.session_state.stage = 1
     result = dict()
@@ -138,9 +141,11 @@ def download_whitelist_template_button(underlyings_candidates: list[str]) -> Non
         )
 
 
-def display_single_backtest(backtest: pd.DataFrame) -> None:
+def display_single_backtest(run_idx: str) -> None:
     height = 1000
     width = 1500
+    backtest = st.session_state.result['runs'][run_idx]
+    params = st.session_state.result['grid'].iloc[list(st.session_state.result['runs'].keys()).index(run_idx)]
     # plot_perf(backtest, override_grid['strategy.base_buffer'][0], height=height, width=width)
     apy = (backtest['apy'] * backtest['weights'].divide(backtest['weights'].sum(axis=1), axis=0)).drop(
         columns='total').reset_index().melt(id_vars='index', var_name='pool', value_name='apy').dropna()
@@ -152,30 +157,42 @@ def display_single_backtest(backtest: pd.DataFrame) -> None:
     apy = pd.concat([apy, apyReward], axis=0)
     apy['apy'] = apy['apy'] * 100
     avg_apy = apy.groupby('pool').mean()
-    truncated_avg_apy = avg_apy[avg_apy['apy'] > -1].reset_index()
+    truncated_avg_apy = avg_apy[avg_apy['apy'] > -9999].reset_index()
+
     # show avg over backtest
-    st.write(f'total apy = {avg_apy["apy"].sum()/100:.1%}')
+    details = dict()
+    year_fraction = (backtest.index.max() - backtest.index.min()).total_seconds()/24/3600/365.25
+    details['gas_apy'] = -100 * backtest[('pnl', 'gas')].sum() / backtest[('pnl', 'wealth')].mean() / year_fraction
+    details['slippage_apy'] = -100 * backtest[('pnl', 'tx_cost')].sum() / backtest[('pnl', 'wealth')].mean() / year_fraction
+    details['nb trade per d'] = backtest[('pnl', 'gas')].sum() /  params['strategy.gas'] / year_fraction / 365.25
+    details['churn (nb of days to trade 100% capital)'] = 365.25 * year_fraction /(-details['slippage_apy']/100 / params['strategy.cost'])
+
+    st.subheader(f'total apy = {avg_apy["apy"].sum()/100:.1%}')
+    st.table(details)
     st.plotly_chart(
         px.pie(truncated_avg_apy, names='pool', values='apy', title='apy * weights (%)', height=height / 2,
                width=width / 2))
+
     # show all apy drivers over time
     truncated_apy = apy[apy['pool'].isin(truncated_avg_apy['pool'])]
     st.plotly_chart(
         px.bar(truncated_apy, x='index', y='apy', color='pool', title='apy (%)', height=height, width=width, barmode='stack'))
-    # show all weights over time
+
+    ## show all weights over time
     weights = backtest['weights'].drop(columns='total').reset_index().melt(id_vars='index', var_name='pool',
                                                                                value_name='weights').dropna()
     truncated_weights = weights[weights['pool'].isin(truncated_avg_apy['pool'])]
     st.plotly_chart(
         px.bar(truncated_weights, x='index', y='weights', color='pool', title='Allocations ($)', height=height,
                width=width, barmode='stack'))
+
     # show all dilutors over time
     dilutor = backtest['dilutor'].drop(columns='total').reset_index().melt(id_vars='index', var_name='pool',
                                                                                value_name='dilutor').dropna()
     dilutor['dilutor'] = 100 * (1 - dilutor['dilutor'])
     truncated_dilutor = dilutor[dilutor['pool'].isin(truncated_avg_apy['pool'])]
     st.plotly_chart(
-        px.line(truncated_dilutor, x='index', y='dilutor', color='pool', title='alloc / tvl (%)', height=height,
+        px.line(truncated_dilutor, x='index', y='dilutor', color='pool', title='pool ownership (%)', height=height,
                 width=width))
 
 
