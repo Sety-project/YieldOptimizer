@@ -2,6 +2,8 @@
 
 Streamlit app that backtests a DeFi yield optimization strategy. Uses a yield predictor and is mindful of slippage, gaz, yield dilution.
 
+More details on https://medium.com/@nononymous/poolhopper-7fb6cf18182b
+
 ## Architecture
 ### 1) Data collection (./scrappers)
 #### a) ./scrappers/defillama_history (API to defillama)
