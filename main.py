@@ -155,49 +155,50 @@ with backtest_tab:
                                                            "backtest.end_date",
                                                            "backtest.start_date"])
 
-            override_grid = None
             if uploaded_file := st.file_uploader("Upload a set of backtest parameters (download template above)", type=['yaml']):
                 override_grid = yaml.safe_load(uploaded_file)
-                # sorry hack...
-                for record in override_grid:
-                    record['backtest.end_date'] = get_date_or_timedelta(record['backtest.end_date'], ref_date=date.today())
-                    record['backtest.start_date'] = get_date_or_timedelta(record['backtest.start_date'], ref_date=record['backtest.end_date'])
             else:
                 with open(os.path.join(os.sep, os.getcwd(), "config", 'grid.yaml'), 'r') as uploaded_file:
                     override_grid = yaml.safe_load(uploaded_file)
+            # relative date support
+            for record in override_grid:
+                record['backtest.end_date'] = get_date_or_timedelta(record['backtest.end_date'],
+                                                                    ref_date=date.today())
+                record['backtest.start_date'] = get_date_or_timedelta(record['backtest.start_date'],
+                                                                      ref_date=record['backtest.end_date'])
 
             if st.form_submit_button("Run backtest") and override_grid is not None:
-                if st.session_state.authentification == 'verified':
-                    progress_bar1 = st.progress(value=0.0, text='Running grid...')
-                    progress_bar2 = st.progress(value=0.0, text='Running backtest...')
+                progress_bar1 = st.progress(value=0.0, text='Running grid...')
+                progress_bar2 = st.progress(value=0.0, text='Running backtest...')
 
-                    st.session_state.result = VaultBacktestEngine.run_grid(parameter_grid=override_grid,
-                                                                           parameters=st.session_state.parameters,
-                                                                           data=
-                                                                           st.session_state.all_history,
-                                                                           progress_bar1=progress_bar1,
-                                                                           progress_bar2=progress_bar2)
-                    progress_bar1.progress(value=1., text='Completed grid')
-                    st.session_state.stage = 5
-                else:
-                    st.warning(
-                        html.unescape(
-                            'chat https://t.me/Pronoia_Bot, then enter your tg handle in the sidebar to get access'
-                        )
-                    )
+                st.session_state.result = VaultBacktestEngine.run_grid(parameter_grid=override_grid,
+                                                                       parameters=st.session_state.parameters,
+                                                                       data=
+                                                                       st.session_state.all_history,
+                                                                       progress_bar1=progress_bar1,
+                                                                       progress_bar2=progress_bar2)
+                progress_bar1.progress(value=1., text='Completed grid')
+                st.session_state.stage = 5
         st.subheader("Backtest grid", divider='grey')
         st.json(override_grid)
 
 with analytics_tab:
     if (st.session_state.stage >= 5) and (selected_run := st.selectbox('Select run name', st.session_state.result['runs'].keys())):
-        display_single_backtest(st.session_state.result['runs'][selected_run])
-        pd.concat(st.session_state.result['runs'], axis=1).to_csv('logs/runs.csv')
-        with open('logs/runs.csv', "rb") as file:
-            st.download_button(
-                label="Download runs",
-                data=file,
-                file_name='runs.csv',
-                mime='text/csv',
+        if st.session_state.authentification == 'verified':
+            display_single_backtest(selected_run)
+            pd.concat(st.session_state.result['runs'], axis=1).to_csv('logs/runs.csv')
+            with open('logs/runs.csv', "rb") as file:
+                st.download_button(
+                    label="Download runs",
+                    data=file,
+                    file_name='runs.csv',
+                    mime='text/csv',
+                )
+        else:
+            st.warning(
+                html.unescape(
+                    'chat https://t.me/Pronoia_Bot, then enter your tg handle in the sidebar to get access'
+                )
             )
 
 with grid_tab:

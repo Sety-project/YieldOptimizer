@@ -7,7 +7,7 @@ import requests
 import telegram
 
 def check_whitelist(tg_username: str) -> bool:
-    if st.session_state.database.is_whitelisted(tg_username):
+    if st.session_state.database.is_whitelisted(tg_username) or (tg_username in st.secrets.admins):
         st.session_state.database.record_interaction(tg_username, datetime.now(tz=timezone.utc), 'login')
         st.sidebar.success(f"Welcome back, {tg_username}")
         return True
@@ -18,7 +18,7 @@ def check_whitelist(tg_username: str) -> bool:
     if latest_interaction is not None:
         asyncio.run(bot.send_message(chat_id=latest_interaction['chat']['id'],
                                      text=f"ok {latest_interaction['from']['first_name']}, you're in"))
-        st.session_state.database.record_interaction(tg_username, pd.to_datetime(latest_interaction['date'], unit='s', utc=True), 'register')
+        st.session_state.database.record_interaction(tg_username, pd.to_datetime(latest_interaction['date'], unit='s', utc=True), latest_interaction['message']['text'])
         st.sidebar.success(f"Thanks for registering, {tg_username}")
         return True
     else:
