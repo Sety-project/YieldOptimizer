@@ -14,14 +14,15 @@ from utils.io_utils import profile_all
 
 #@profile_all
 class SqlApi:
-    def __init__(self, name: str, pool_size: int, max_overflow: int = 20, pool_recycle: int = 3600):
+    def __init__(self, name: str, pool_size: int, max_overflow: int, pool_recycle: int):
         self.schema = {'date': DateTime(timezone=True),
                        'haircut_apy': Float,
                        'apy': Float,
                        'apyReward': Float,
                        'il': Float,
                        'tvl': Float}
-        self.engine = st.connection(name, type="sql", autocommit=True)
+        self.engine = st.connection(name, type="sql", autocommit=True,
+                                    pool_size=pool_size, max_overflow=max_overflow, pool_recycle=pool_recycle)
         # self.engine: Engine = create_engine(database,
         #                                     pool_size=pool_size,
         #                                     max_overflow=max_overflow,
