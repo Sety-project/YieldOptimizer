@@ -1,5 +1,6 @@
 import html
 import os
+import sys
 from datetime import timedelta, date
 
 import pandas as pd
@@ -14,6 +15,7 @@ from utils.streamlit_utils import download_grid_button, \
     display_single_backtest, download_whitelist_template_button, MyProgressBar, prettify_metadata, \
     authentification_sidebar, coingecko, prompt_initialization, prompt_protocol_filtering, prompt_pool_filtering, \
     load_parameters, parameter_override
+assert (sys.version_info >= (3, 10)), "Please use Python 3.10 or higher"
 
 pd.options.mode.chained_assignment = None
 

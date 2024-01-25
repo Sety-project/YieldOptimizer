@@ -1,6 +1,6 @@
-# midfreq
+# https://poolhopper.streamlit.app/
 
-Streamlit app that backtests a DeFi yield optimization strategy. Uses a yield predictor and is mindful slippage, gaz, yield dilution.
+Streamlit app that backtests a DeFi yield optimization strategy. Uses a yield predictor and is mindful of slippage, gaz, yield dilution.
 
 ## Architecture
 ### 1) Data collection (./scrappers)
@@ -23,12 +23,12 @@ Performs portfolio optimization w/ transaction costs assuming a holding horizon.
 ### 4) Backtesting (./strategies/vault_backtest.py) 
 Backtests vault_rebalancing.py, with one or several sets of parameters
 ### 5) configs (./config)
-- params.yaml is big yaml input parametrizing prediction, betasizing, backtest etc..
+- params.yaml is big yaml input parametrizing prediction, bet sizing, backtest etc..
 - whitelist.yaml is the default list of protocols.
+- grid.yaml is the default grid of parameters to backtest
+### 6) streamlit UI (./main.py)
+- leverages postgres DB to store data (./utils/postgres.py)
+- authentification through telegram bot (./utils/telegram_bot.py)
 # guide
 - to install, run `pip install -r requirements.txt`
-- then run `python main.py`[command] [config/vault_name.yaml].<br>
-Command `backtest` will run backtests, and `grid` will run several times with different hyperparameters (define grid in `__main__` code)
-- This will generate full backtest results in ./logs/[vault_name]/[param values].csv <br>
-and a summary of all backtests in ./logs/[vault_name]/grid.csv
-- Open `DynBacktests-research.ipynb` to analyze backtest results and graph perf trajectories, hyperparameters sensitivities etc...
+- then run module streamlit `run main.py` to launch the streamlit app
