@@ -1,5 +1,5 @@
-- backtest.end_date: '2024-01-13'
-  backtest.start_date: '2023-10-15'
+- backtest.end_date: '1D'
+  backtest.start_date: '90D'
   label_map.apy.horizons:
     - 10
   run_parameters.models.apy.TrivialEwmPredictor.params.cap: 3
@@ -10,3 +10,27 @@
   strategy.cost: 0.0005
   strategy.gas: 10
   strategy.initial_wealth: 100000.0
+- backtest.end_date: '1D'
+  backtest.start_date: '90D'
+  label_map.apy.horizons:
+    - 10
+  run_parameters.models.apy.TrivialEwmPredictor.params.cap: 3
+  run_parameters.models.apy.TrivialEwmPredictor.params.halflife: 10d
+  run_parameters.models.apy.TrivialEwmPredictor.params.horizon: 10d
+  strategy.base_buffer: 0.05
+  strategy.concentration_limit: 0.25
+  strategy.cost: 0.0005
+  strategy.gas: 10
+  strategy.initial_wealth: 1000000.0
+- backtest.end_date: '1D'
+  backtest.start_date: '90D'
+  label_map.apy.horizons:
+    - 10
+  run_parameters.models.apy.TrivialEwmPredictor.params.cap: 3
+  run_parameters.models.apy.TrivialEwmPredictor.params.halflife: 10d
+  run_parameters.models.apy.TrivialEwmPredictor.params.horizon: 10d
+  strategy.base_buffer: 0.05
+  strategy.concentration_limit: 0.25
+  strategy.cost: 0.0005
+  strategy.gas: 10
+  strategy.initial_wealth: 10000000.0
