@@ -3,6 +3,7 @@ import os
 import sys
 from datetime import timedelta, date
 
+import matplotlib
 import pandas as pd
 import streamlit as st
 import yaml
@@ -14,7 +15,8 @@ from utils.postgres import SqlApi
 from utils.streamlit_utils import download_grid_button, \
     display_single_backtest, download_whitelist_template_button, MyProgressBar, prettify_metadata, \
     authentification_sidebar, coingecko, prompt_initialization, prompt_protocol_filtering, prompt_pool_filtering, \
-    load_parameters, parameter_override
+    load_parameters, parameter_override, display_heatmap
+
 assert (sys.version_info >= (3, 10)), "Please use Python 3.10 or higher"
 
 pd.options.mode.chained_assignment = None
@@ -125,7 +127,7 @@ with initialize_tab:
                 errors = len([x for x in fetch_summary if "error" in fetch_summary[x][0]])
                 progress_bar.progress_bar.progress(value=1.0, text=f'Fetched {len([x for x in fetch_summary if ("Added" in fetch_summary[x][0]) or ("Created" in fetch_summary[x][0])])} pools \n'
                           f' Use Cache for {len([x for x in fetch_summary if "from db" in fetch_summary[x][0]])} pools \n '
-                          f'{errors} errors{ ("excluding errorenous pools unless you re-fetch (usually a DefiLama API glitch") if errors > 0 else ""}')
+                          f'{errors} errors{ (", excluding errorenous pools unless you re-fetch (usually a DefiLama API glitch") if errors > 0 else ""}')
 
     if st.session_state.stage >= 4:
         pd.concat(st.session_state.all_history, axis=1).to_csv('all_history.csv')
@@ -204,8 +206,43 @@ with analytics_tab:
             )
 
 with grid_tab:
-    if (st.session_state.stage >= 5):
-        st.dataframe(st.session_state.result['grid'])
+    if st.session_state.stage >= 5 and st.session_state.authentification == 'verified':
+        grid = st.session_state.result['grid']
+        fields = grid.columns
+        metric_fields = ['perf', 'tx_cost', 'avg_entropy']
+
+        st.dataframe(grid)
+        with st.form("heatmap_form"):
+            X_options = [ind for ind in fields if ind not in metric_fields]
+            X = st.selectbox('X axis', X_options, index=list(X_options).index("strategy.initial_wealth"))
+
+            Y_options = [col for col in fields if col not in [X] + metric_fields]
+            Y = st.selectbox('Y axis', Y_options, index=list(Y_options).index("strategy.gas"))
+
+            metrics = st.selectbox('Metrics', metric_fields, index=0)
+
+            filtering_options = [field for field in fields if field not in [X, Y] + metric_fields]
+            filtering = {
+                field: st.selectbox(
+                    field,
+                    list(
+                        (
+                            grid[field].explode()
+                            if type(grid[field].iloc[0]) is list
+                            else grid[field]
+                        ).unique()
+                    ),
+                    index=0,
+                )
+                for field in filtering_options
+            }
+            st.write("Heatmap of the grid search results. The color intensity is:\n "
+                     "- proportional to the metric value\n"
+                     "- for values set in the filters"
+                     "- averaged over the empty fields in filters\n")
+            if st.form_submit_button("Display heatmap"):
+                st.pyplot(display_heatmap(grid, metrics=[metrics], ind=[X], col=[Y], filtering=filtering),
+                          use_container_width=True)
 
 with execution_tab:
     st.write("coming soon")

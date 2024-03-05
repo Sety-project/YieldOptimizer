@@ -4,6 +4,8 @@ from copy import deepcopy
 
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 import streamlit as st
 import yaml
 from plotly import express as px
@@ -225,6 +227,25 @@ def display_backtest_grid(grid):
         display_heatmap(metrics, ind, col, filtering)
     except Exception as e:
         st.write(str(e))
+
+
+def display_heatmap(grid: pd.DataFrame, metrics, ind, col, filtering):
+    fig = plt.figure()
+
+    # filter
+    filtered_grid = grid[np.logical_and.reduce([
+        grid[filter_c].explode() == filter_v
+        for filter_c, filter_v in filtering.items()])]
+
+    # pivot and display
+    for i, values in enumerate(metrics):
+        for j, column in enumerate(col):
+            df = filtered_grid.pivot_table(values=values, index=ind, columns=col) * 100
+            ax = fig.add_subplot(len(metrics), 1, i + j + 1)
+            ax.set_title(f'{values} by {column}')
+            sns.heatmap(data=df, ax=ax)#, square=True, cbar_kws={'shrink': .3}, annot=True, annot_kws={'fontsize': 8})
+
+    return fig
 
 
 class MyProgressBar:
