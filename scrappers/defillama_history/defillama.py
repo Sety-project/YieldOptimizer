@@ -84,7 +84,7 @@ class FilteredDefiLlama(DefiLlama):
     '''
     filters protocols and pools from defillama
     '''
-    pegged_symbols = {'usd': ['usdt', 'usdc', 'dai', 'frax', 'lusd', 'mim', 'susd', 'fraxbp', 'mkusd'],
+    pegged_symbols = {'usd': ['usdt', 'usdc', 'dai', 'frax', 'lusd', 'mim', 'susd', 'fraxbp', 'mkusd', 'dola', 'usdc.e'],
                       'eth': ['weth', 'eth', 'steth', 'wsteth', 'reth', 'reth2', 'frxeth', 'sfrxeth', 'sweth', 'cbeth',
                               'oeth'],
                       'btc': ['wbtc']}
