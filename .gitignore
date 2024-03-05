@@ -1,5 +1,6 @@
 .streamlit/secrets*
 .venv/
+.idea/
 logs/
 *.csv
 *.xls*
