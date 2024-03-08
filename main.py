@@ -172,16 +172,10 @@ with backtest_tab:
                                                                       ref_date=record['backtest.end_date'])
 
             if st.form_submit_button("Run backtest") and override_grid is not None:
-                progress_bar1 = st.progress(value=0.0, text='Running grid...')
-                progress_bar2 = st.progress(value=0.0, text='Running backtest...')
-
                 st.session_state.result = VaultBacktestEngine.run_grid(parameter_grid=override_grid,
                                                                        parameters=st.session_state.parameters,
                                                                        data=
-                                                                       st.session_state.all_history,
-                                                                       progress_bar1=progress_bar1,
-                                                                       progress_bar2=progress_bar2)
-                progress_bar1.progress(value=1., text='Completed grid')
+                                                                       st.session_state.all_history)
                 st.session_state.stage = 5
         st.subheader("Backtest grid", divider='grey')
         st.json(override_grid)

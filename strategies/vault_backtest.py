@@ -1,17 +1,16 @@
-import os
-from datetime import timedelta
+import concurrent.futures
 import os
 from copy import deepcopy
 from datetime import timedelta
+from functools import partial
 
 import numpy as np
 import pandas as pd
-from streamlit.delta_generator import DeltaGenerator
 
 from research.research_engine import build_ResearchEngine, FileData
 from strategies.vault_betsizing import YieldStrategy
 from utils.io_utils import modify_target_with_argument
-from utils.sklearn_utils import entropy
+from utils.streamlit_utils import MyProgressBar
 
 
 class VaultBacktestEngine:
@@ -22,10 +21,9 @@ class VaultBacktestEngine:
         self.performance = performance[(performance.index >= self.start_date) & (performance.index <= self.end_date)]
 
     @staticmethod
-    def run(parameters: dict, data: FileData, progress_bar: DeltaGenerator = None) -> pd.DataFrame:
+    def run(parameters: dict, data: FileData, progress_bar2: MyProgressBar = None) -> dict[str, pd.DataFrame]:
         '''
         Runs a backtest on one instrument.
-        :param data:
         '''
         engine = build_ResearchEngine(parameters, data)
         performance = pd.concat(engine.performance, axis=1)
@@ -34,8 +32,9 @@ class VaultBacktestEngine:
         rebalancing_strategy = YieldStrategy(research_engine=engine, params=parameters['strategy'])
 
         result = pd.DataFrame()
+        progress_bar1 = MyProgressBar(length=backtest.performance.shape[0], value=0.0, text='Running time...')
         prev_index = backtest.performance.index[0]
-        for i, (index, cur_performance) in enumerate(backtest.performance.iterrows()):
+        for index, cur_performance in backtest.performance.iterrows():
             prev_state = deepcopy(rebalancing_strategy.state)
 
             predicted_apys, tvl = rebalancing_strategy.predict(index)
@@ -46,8 +45,8 @@ class VaultBacktestEngine:
 
             new_entry = backtest.record_result(index, predicted_apys, prev_state, rebalancing_strategy, step_results)
             result = pd.concat([result, new_entry.to_frame().T], axis=0)
-            if progress_bar:
-                progress_bar.progress(value=(i+1) / len(backtest.performance), text=f'Backtesting {index}')
+            if progress_bar1:
+                progress_bar1.increment(text=f'Backtesting {index}')
 
         pool_max = result.xs(key='weights', level=0, axis=1).max()
         negligible_pools = pool_max[pool_max < parameters['strategy']['initial_wealth']*VaultBacktestEngine.weight_tolerance].index
@@ -55,37 +54,32 @@ class VaultBacktestEngine:
             if col[1] in negligible_pools:
                 result.drop(col, axis=1, inplace=True)
 
-        return result
+        progress_bar1.progress_bar.status = 'completed'
+        if progress_bar2:
+            progress_bar2.increment(text=f'Ran {1+int(progress_bar2.progress_idx)} out of {progress_bar2.length}')
+        return {'result': result,
+                'perf': VaultBacktestEngine.perf_analysis(result)}
 
     @staticmethod
-    def run_grid(parameter_grid: list[dict], parameters: dict, data: FileData, progress_bar1: DeltaGenerator = None, progress_bar2: DeltaGenerator = None) -> dict:
+    def run_grid(parameter_grid: list[dict], parameters: dict, data: FileData) -> dict:
         '''
         returns:
             - runs = dict of backtest results for each parameter_grid
             - grid = performance metrics for all runs: perf, tx_cost, avg gini
         '''
-        run_name = 'latest'
-        dirname = os.path.join(os.sep, os.getcwd(), "logs", run_name)
-        if not os.path.isdir(dirname):
-            os.mkdir(dirname)
+        progress_bar2 = MyProgressBar(length=len(parameter_grid), value=0.0, text='Running backtest...')
 
-        result: dict[str, pd.DataFrame] = {}
-        perf_list: list[pd.DataFrame] = []
-        for i, cur_params_override in enumerate(parameter_grid):
-            name_to_str = '_'.join([f'{str(elem)}' for elem in cur_params_override.values()])
+        params = [modify_target_with_argument(parameters, cur_params_override)
+                  for cur_params_override in parameter_grid]
+        names = ['_'.join([f'{str(elem)}' for elem in cur_params_override.values()])
+                 for cur_params_override in parameter_grid]
+        results = [VaultBacktestEngine.run(parameters=param, data=data, progress_bar2=progress_bar2)
+                   for param in params]
 
-            filename = os.path.join(os.sep, dirname, f'{name_to_str}_backtest.csv')
+        perfs = pd.DataFrame([pd.concat([pd.Series(cur_params_override), result['perf']]) for cur_params_override, result in zip(parameter_grid, results)])
+        runs = {name: result['result'] for name, result in zip(names, results)}
 
-            cur_params = modify_target_with_argument(parameters, cur_params_override)
-            result[name_to_str] = VaultBacktestEngine.run(cur_params, data, progress_bar2)
-            perf = VaultBacktestEngine.perf_analysis(result[name_to_str])
-            result[name_to_str].to_csv(os.path.join(filename))
-
-            perf_list.append(pd.concat([pd.Series(cur_params_override), perf]))
-            if progress_bar1:
-                progress_bar1.progress(value=(i+1) / len(parameter_grid), text=f'Run {i+1} out of {len(parameter_grid)}')
-
-        return {'grid': pd.DataFrame(perf_list), 'runs': result}
+        return {'grid': perfs, 'runs': runs}
 
     def record_result(self, index, predicted_apys, prev_state, rebalancing_strategy, step_results) -> pd.Series:
         weights = {f'weight_{i}': weight
@@ -132,6 +126,12 @@ class VaultBacktestEngine:
         '''
         returns performance metrics for a backtest: perf, tx_cost, avg gini
         '''
+
+        def entropy(weights: pd.DataFrame):
+            rescaled = weights.div(weights.sum(axis=1), axis=0)
+            entrop = rescaled.apply(lambda x: -np.log(np.clip(x, a_min=1e-18, a_max=1.0)) * x).sum(axis=1)
+            normalized = entrop / np.log(len(weights.columns))
+            return normalized
 
         weights = df['weights']
         dt = ((weights.index.max() - weights.index.min())/timedelta(days=365))

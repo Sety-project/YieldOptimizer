@@ -198,37 +198,6 @@ def display_single_backtest(run_idx: str) -> None:
                 width=width))
 
 
-def display_backtest_grid(grid):
-    def display_heatmap(metrics, ind, col, filtering):
-        fig = plt.figure(figsize=(20, 20))  # width x height
-
-        # filter
-        filtered_grid = grid[np.logical_and.reduce([
-            grid[filter_c] == filter_v
-            for filter_c, filter_v in filtering.items()])]
-
-        # pivot and display
-        for i, values in enumerate(metrics):
-            for j, column in enumerate(col):
-                df = filtered_grid.pivot_table(values=values, index=ind, columns=col) * 100
-                ax = fig.add_subplot(len(col), len(metrics), i + j + 1)
-                ax.set_title(f'{values} by {column}')
-                sns.heatmap(data=df, ax=ax, square=True, cbar_kws={'shrink': .3}, annot=True,
-                            annot_kws={'fontsize': 12})
-        st.pyplot(fig=fig)
-
-    metrics = st.multiselect(label='Select metrics', options=['perf', 'churn in d', 'entropy'], default=['perf', 'churn in d'])
-    ind = st.selectbox(label='x-axis', options=st.session_state.default_parameters.keys(), index=0)
-    col = st.selectbox(label='y-axis', options=st.session_state.default_parameters.keys(), index=4)
-    filtering = deepcopy(st.session_state.default_parameters)
-    filtering.pop(ind)
-    filtering.pop(col)
-    try:
-        display_heatmap(metrics, ind, col, filtering)
-    except Exception as e:
-        st.write(str(e))
-
-
 def display_heatmap(grid: pd.DataFrame, metrics, ind, col, filtering):
     fig = plt.figure()
 
@@ -242,7 +211,7 @@ def display_heatmap(grid: pd.DataFrame, metrics, ind, col, filtering):
         for j, column in enumerate(col):
             df = filtered_grid.pivot_table(values=values, index=ind, columns=col) * 100
             ax = fig.add_subplot(len(metrics), 1, i + j + 1)
-            ax.set_title(f'{values} by {column}')
+            ax.set_title(f'{values} by {ind[0]}, {column}')
             sns.heatmap(data=df, ax=ax)#, square=True, cbar_kws={'shrink': .3}, annot=True, annot_kws={'fontsize': 8})
 
     return fig
@@ -253,8 +222,8 @@ class MyProgressBar:
     def __init__(self, length, **kwargs):
         self.progress_bar = st.progress(**kwargs)
         self._lock = threading.Lock()
-        self.length: float = length
-        self._progress = 0
+        self.length: int = length
+        self.progress_idx: int = 0
 
     def __enter__(self):
         self._lock.acquire()
@@ -263,11 +232,10 @@ class MyProgressBar:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._lock.release()
 
-    def increment(self, value: float=1., text: str = ''):
-        assert value >= 0
-        assert value <= self.length
+    def increment(self, value: int = 1, text: str = ''):
+        assert 0 <= self.progress_idx <= self.length
         with self:
-            self._progress += value/self.length
-            self.progress_bar.progress(value=np.clip(self._progress, a_min=0, a_max=1), text=text)
+            self.progress_idx += value
+            self.progress_bar.progress(value=np.clip(self.progress_idx / self.length, a_min=0, a_max=1), text=text)
 
 
