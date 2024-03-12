@@ -150,8 +150,8 @@ class FilteredDefiLlama(DefiLlama):
 
         # normalize
         pools['project'] = pools['project'].apply(lambda s: s.lower().replace(' ', '-'))
-        pools['underlyingTokens'] = pools['underlyingTokens'].apply(lambda s: [x.lower() for x in s] if s else None)
-        pools['rewardTokens'] = pools['rewardTokens'].apply(lambda s: [x.lower() for x in s if x] if s else None)
+        pools['underlyingTokens'] = pools['underlyingTokens'].apply(lambda s: [x.lower() for x in s if x] if s else None)
+        pools['rewardTokens'] = pools['rewardTokens'].apply(lambda s: [x.lower() for x in s if x if x] if s else None)
         pools['name'] = pools.apply(lambda x: '_'.join([x[key]
                                                         for key in ['chain', 'project', 'symbol', 'poolMeta']
                                                         if x[key]])[:63],
