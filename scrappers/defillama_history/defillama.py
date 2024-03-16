@@ -181,9 +181,8 @@ class FilteredDefiLlama(DefiLlama):
         DB errors may be solved by purging queries at https://console.aiven.io/account/xxxxxxx/project/streamlit/services/streamlit/current-queries'''
 
         # caching #TODO: daily for now
-        last_updated = await self.sql_api.last_updated(metadata)
-        if (last_updated is not None
-            and last_updated > datetime.now(
+        last_updated = await self.sql_api.last_updated(metadata['name'])
+        if (last_updated > datetime.now(
                     timezone.utc) - timedelta(days=1)):
             fetch_summary[metadata["name"]] = ('from db', last_updated)
             progress_bar.increment(text=f'From db: {metadata["name"]}')
