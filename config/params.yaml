@@ -59,3 +59,5 @@ strategy:
 backtest:
   start_date: '2023-09-01T00:00:00'
   end_date: '2023-12-01T00:00:00'
+plex:
+  update_frequency: 60 # in minutes

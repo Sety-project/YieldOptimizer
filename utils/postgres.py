@@ -1,11 +1,12 @@
 import logging
 import sys
+import typing
 from datetime import datetime
 from datetime import timezone
 
 import pandas as pd
 import streamlit as st
-from sqlalchemy import Float, DateTime, Connection, Engine
+from sqlalchemy import Float, DateTime, Connection, Engine, String
 from sqlalchemy import MetaData
 from sqlalchemy import text as sql_text
 
@@ -15,12 +16,23 @@ from utils.io_utils import profile_all
 #@profile_all
 class SqlApi:
     def __init__(self, name: str, pool_size: int, max_overflow: int, pool_recycle: int):
-        self.schema = {'date': DateTime(timezone=True),
-                       'haircut_apy': Float,
-                       'apy': Float,
-                       'apyReward': Float,
-                       'il': Float,
-                       'tvl': Float}
+        self.pool_schema = {'date': DateTime(timezone=True),
+                            'haircut_apy': Float,
+                            'apy': Float,
+                            'apyReward': Float,
+                            'il': Float,
+                            'tvl': Float,
+                            'updated': DateTime(timezone=True)}
+        self.plex_schema = {'chain': String(16),
+                            'protocol': String(32),
+                            # 'description': portfolio_item['detail']['description'],
+                            'hold_mode': String(16),
+                            'type': String(16),
+                            'asset': String(32),
+                            'amount': Float,
+                            'price': Float,
+                            'value': Float,
+                            'updated': DateTime(timezone=True)}
         self.engine = st.connection(name, type="sql", autocommit=True,
                                     pool_size=pool_size, max_overflow=max_overflow, pool_recycle=pool_recycle)
         # self.engine: Engine = create_engine(database,
@@ -57,16 +69,18 @@ class SqlApi:
         if not new_data.empty:
             new_data['updated'] = datetime.now(timezone.utc)
             with self.engine.connect() as connection:
-                await async_wrap(new_data.to_sql)(name=pool, con=connection, if_exists='append', index=False, dtype=self.schema)
+                await async_wrap(new_data.to_sql)(name=pool, con=connection, if_exists='append', index=False, dtype=self.pool_schema)
         else:
             result = f"No new data: {pool}"
         return result
 
-    async def last_updated(self, metadata: dict) -> datetime:
-        if metadata['name'] in self.tables:
-            query = f'''SELECT MAX(updated) FROM \"{metadata['name']}\";'''
+    async def last_updated(self, name: str) -> typing.Union[datetime, None]:
+        if name in self.tables:
+            query = f'''SELECT MAX(updated) FROM \"{name}\";'''
             result = await async_wrap(self.read_sql_query)(query)
             return result.squeeze().replace(tzinfo=timezone.utc)
+        else:
+            return datetime(1970, 1, 1, tzinfo=timezone.utc)
 
     def is_whitelisted(self, tg_username: str) -> bool:
         if 'interactions' not in self.tables:
@@ -84,6 +98,17 @@ class SqlApi:
         with self.engine.session as connection:
             connection.execute(sql_text(f"INSERT INTO interactions (username, timestamp, message) VALUES ('{tg_username}', '{timestamp}', '{message}')"))
             connection.commit()
+
+    async def insert_snapshot(self, snapshot: pd.DataFrame, address: str) -> None:
+        # if address not in self.tables:
+        #     with self.engine.session as connection:
+        #         connection.execute(sql_text(
+        #             f"CREATE TABLE {address} (username VARCHAR(255), timestamp TIMESTAMP WITH TIME ZONE, message VARCHAR(255));")
+        #         )
+        #         connection.commit()
+        with self.engine.connect() as connection:
+            await async_wrap(snapshot.to_sql)(name=address, con=connection, if_exists='append', index=False, dtype=self.plex_schema, method='multi')
+
 
     def delete(self, tables: list[str] = None):
         metadata = MetaData()
@@ -107,7 +132,7 @@ if __name__ == '__main__':
     elif sys.argv[1] == "list_tables":
         print(sql_obj.list_tables())
     elif sys.argv[1] == "write":
-        df = pd.DataFrame({key['field']: range(5) for key in sql_obj.schema})
+        df = pd.DataFrame({key['field']: range(5) for key in sql_obj.pool_schema})
         sql_obj.write("Arbitrum_aave-v3_USDC")
     else:
         print("invalid argument")
