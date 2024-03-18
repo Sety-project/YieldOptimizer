@@ -1,3 +1,5 @@
+import json
+import os.path
 import typing
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,8 +23,16 @@ class DebankAPI:
             "accept": "application/json",
             "AccessKey": debank_access_key,
         }
+        if not os.path.isdir('data'):
+            os.mkdir(os.path.join(os.sep, os.getcwd(), 'data'))
+            os.chmod('data', 0o777)
 
-    async def fetch_position_snapshot(self, address: str) -> pd.DataFrame:
+    async def fetch_position_snapshot(self, address: str, write_to_json=True) -> pd.DataFrame:
+        '''
+        Fetches the position snapshot for a given address from the Debank API
+        Stores the result in a json file if write_to_json is True
+        Parses the result into a pandas DataFrame and returns it
+        '''
         async def call_position_endpoint(endpoint: str) -> typing.Any:
             async with session.get(f'{self.api_url}/{endpoint}', headers=self.headers,
                                    params={"id": address}) as response:
@@ -30,18 +40,25 @@ class DebankAPI:
 
         endpoints = ["all_complex_protocol_list", "all_token_list", "all_nft_list"]
         async with aiohttp.ClientSession() as session:
-            results = await asyncio.gather(*[call_position_endpoint(f'user/{endpoint}')
+            json_results = await asyncio.gather(*[call_position_endpoint(f'user/{endpoint}')
                                        for endpoint in endpoints])
+
         res_list = sum(
             (
                 getattr(self, f'parse_{endpoint}')(res)
-                for endpoint, res in zip(endpoints, results)
+                for endpoint, res in zip(endpoints, json_results)
             ),
             [],
         )
-        result = pd.DataFrame(res_list)
-        result['updated'] = datetime.now(tz=timezone.utc)
-        return result
+        df_result = pd.DataFrame(res_list)
+        now_time = datetime.now(tz=timezone.utc)
+
+        if write_to_json:
+            with open(os.path.join(os.sep, 'data', f"results_{now_time.timestamp()}.json"), 'w') as f:
+                json.dump({'timestamp': now_time} | zip(endpoints, json_results), f)
+
+        df_result['updated'] = now_time
+        return df_result
 
     # TODO:
     # async def fetch_transactions(self, address: str, start_time: int) -> list:
