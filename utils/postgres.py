@@ -15,47 +15,6 @@ from utils.async_utils import async_wrap
 from utils.io_utils import profile_all
 
 
-class CsvDB:
-    plex_schema = {'chain': String(255),
-                        'protocol': String(255),
-                        # 'description': portfolio_item['detail']['description'],
-                        'hold_mode': String(255),
-                        'type': String(255),
-                        'asset': String(255),
-                        'amount': Float,
-                        'price': Float,
-                        'value': Float,
-                        'updated': DateTime(timezone=True)}
-    '''shameful hack bc we have pb with sqlalchemy'''
-    async def insert_snapshot(self, snapshot: pd.DataFrame, address: str) -> None:
-        if os.path.isfile(f'{address}.csv'):
-            previous = pd.read_csv(f'{address}.csv',
-                                   index_col=None,
-                                   parse_dates=['updated'],
-                                   date_parser=lambda x: pd.to_datetime(x, utc=True, unit='ns'))
-        else:
-            previous = pd.DataFrame(columns=list(self.plex_schema.keys()))
-
-        current = pd.concat([snapshot, previous], axis=0).drop_duplicates()
-        await async_wrap(current.to_csv)(f'{address}.csv', index=False)
-
-        # archive once a weekday
-        await async_wrap(current.to_csv)(f'{address}_{datetime.now().weekday()}.csv', index=False)
-
-        return
-
-    async def last_updated(self, address: str) -> typing.Union[datetime, None]:
-        if os.path.isfile(f'{address}.csv'):
-            previous = pd.read_csv(f'{address}.csv',
-                                   index_col=None,
-                                   usecols=['updated'],
-                                   parse_dates=['updated'],
-                                   date_parser=lambda x: pd.to_datetime(x, utc=True, unit='ns'))
-            return previous['updated'].max()
-        else:
-            return datetime(1970, 1, 1, tzinfo=timezone.utc)
-
-
 #@profile_all
 class SqlApi:
     def __init__(self, name: str, pool_size: int, max_overflow: int, pool_recycle: int):
@@ -65,16 +24,6 @@ class SqlApi:
                             'apyReward': Float,
                             'il': Float,
                             'tvl': Float,
-                            'updated': DateTime(timezone=True)}
-        self.plex_schema = {'chain': String(255),
-                            'protocol': String(255),
-                            # 'description': portfolio_item['detail']['description'],
-                            'hold_mode': String(255),
-                            'type': String(255),
-                            'asset': String(255),
-                            'amount': Float,
-                            'price': Float,
-                            'value': Float,
                             'updated': DateTime(timezone=True)}
         self.engine = st.connection(name, type="sql", autocommit=True,
                                     pool_size=pool_size, max_overflow=max_overflow, pool_recycle=pool_recycle)
@@ -141,10 +90,6 @@ class SqlApi:
         with self.engine.session as connection:
             connection.execute(sql_text(f"INSERT INTO interactions (username, timestamp, message) VALUES ('{tg_username}', '{timestamp}', '{message}')"))
             connection.commit()
-
-    async def insert_snapshot(self, snapshot: pd.DataFrame, address: str) -> None:
-            with self.engine.connect() as connection:
-                await async_wrap(snapshot.to_sql)(name=address, con=connection, if_exists='append', index=False, dtype=self.plex_schema)
 
     def delete(self, tables: list[str] = None):
         metadata = MetaData()

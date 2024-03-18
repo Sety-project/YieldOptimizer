@@ -176,13 +176,20 @@ class FilteredDefiLlama(DefiLlama):
                           metadata: dict,
                           fetch_summary: dict, # fetch_summary[metadata["name"]] = (message, updated_time)
                           progress_bar: MyProgressBar,
+                          populate_db: bool = False,
                           **kwargs) -> pd.DataFrame:
         '''gets various components of apy history from defillama
+        - if populate_db:
+            - if available: fetch from db
+            - if not: fetch from defillama and write to db
+        - if not populate_db:
+            - if available: fetch from db
+            - if not: return empty dataframe
         DB errors may be solved by purging queries at https://console.aiven.io/account/xxxxxxx/project/streamlit/services/streamlit/current-queries'''
 
         # caching #TODO: daily for now
         last_updated = await self.sql_api.last_updated(metadata['name'])
-        if (last_updated > datetime.now(
+        if (not populate_db) or (last_updated > datetime.now(
                     timezone.utc) - timedelta(days=1)):
             fetch_summary[metadata["name"]] = ('from db', last_updated)
             progress_bar.increment(text=f'From db: {metadata["name"]}')
@@ -233,11 +240,14 @@ class FilteredDefiLlama(DefiLlama):
         progress_bar.increment(text=fetch_message)
         return result.set_index('date')
 
-    def refresh_apy_history(self, fetch_summary: dict, progress_bar: MyProgressBar) -> FileData:
+    def refresh_apy_history(self, fetch_summary: dict, progress_bar: MyProgressBar, populate_db: bool = False,) -> FileData:
+        if not populate_db:
+            self.pools = self.pools[self.pools['name'].isin(self.sql_api.list_tables())]
         metadata = [x.to_dict() for _, x in self.pools.iterrows()]
         coros = [self.apy_history(meta,
                                   fetch_summary=fetch_summary,
-                                  progress_bar=progress_bar) for meta in metadata]
+                                  progress_bar=progress_bar,
+                                  populate_db=populate_db) for meta in metadata]
         data = asyncio.run(safe_gather(coros, n=st.session_state.parameters['input_data']['async']['gather_limit']))
         # remove failed pools and update updated_time
         self.pools = self.pools[self.pools['name'].apply(lambda pool: fetch_summary[pool][0] != 'error')]
