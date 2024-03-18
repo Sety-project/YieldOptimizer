@@ -18,9 +18,14 @@ with st.spinner('fetching meta data'):
     coingecko.address_map = coingecko.get_address_map()
 
 
-def authentification_sidebar():
+def authentification_sidebar() -> None:
+    if 'skip_authentification' in st.secrets:
+        st.session_state.authentification = "verified"
+        return
+
     if 'authentification' not in st.session_state:
         st.session_state.authentification = "unverified"
+
     if st.sidebar.text_input("Enter your tg handle to backtest:", key='user_tg_handle'):
         if st.session_state.authentification != "verified" and check_whitelist(st.session_state.user_tg_handle):
             st.session_state.authentification = "verified"
