@@ -120,13 +120,14 @@ with initialize_tab:
 
                 progress_bar = MyProgressBar(value=0.0,
                                              length=st.session_state.defillama.pools.shape[0],
-                                             text=f"Fetching data from {st.session_state.parameters['input_data']['database']}")
+                                             text="Fetching data")
                 fetch_summary = {}
                 st.session_state.all_history = st.session_state.defillama.refresh_apy_history(fetch_summary=fetch_summary, progress_bar=progress_bar, populate_db=populate_db)
                 st.session_state.stage = 4
                 errors = len([x for x in fetch_summary if "error" in fetch_summary[x][0]])
                 progress_bar.progress_bar.progress(value=1.0, text=f'Fetched {len([x for x in fetch_summary if ("Added" in fetch_summary[x][0]) or ("Created" in fetch_summary[x][0])])} pools \n'
                           f' Use Cache for {len([x for x in fetch_summary if "from db" in fetch_summary[x][0]])} pools \n '
+                          f' Skipped (not in db)) for {len([x for x in fetch_summary if "skipped (not in db)" in fetch_summary[x][0]])} pools \n '
                           f'{errors} errors{ (", excluding errorenous pools unless you re-fetch (usually a DefiLama API glitch") if errors > 0 else ""}')
 
     if st.session_state.stage >= 4:

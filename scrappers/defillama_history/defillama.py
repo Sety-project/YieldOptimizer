@@ -242,7 +242,10 @@ class FilteredDefiLlama(DefiLlama):
 
     def refresh_apy_history(self, fetch_summary: dict, progress_bar: MyProgressBar, populate_db: bool = False,) -> FileData:
         if not populate_db:
-            self.pools = self.pools[self.pools['name'].isin(self.sql_api.list_tables())]
+            list_table = self.sql_api.list_tables()
+            fetch_summary = {name: ('skipped (not in db)', None)
+                             for name in self.pools[ 'name'] if name not in list_table}
+            self.pools = self.pools[self.pools['name'].isin(list_table)]
         metadata = [x.to_dict() for _, x in self.pools.iterrows()]
         coros = [self.apy_history(meta,
                                   fetch_summary=fetch_summary,
