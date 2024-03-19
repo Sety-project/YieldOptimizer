@@ -23,18 +23,17 @@ pd.options.mode.chained_assignment = None
 
 st.title('Yield optimizer backtest \n by Sety')
 
-st.session_state.parameters = load_parameters()
-st.session_state.database = SqlApi(name=st.session_state.parameters['input_data']['database'],
-                  pool_size=st.session_state.parameters['input_data']['async']['pool_size'],
-                  max_overflow=st.session_state.parameters['input_data']['async']['max_overflow'],
-                  pool_recycle=st.session_state.parameters['input_data']['async']['pool_recycle'])
-authentification_sidebar()
-parameter_override()
-
 initialize_tab, backtest_tab, analytics_tab, grid_tab, execution_tab = st.tabs(
     ["pool selection", "backtest", "backtest analytics", "grid analytics", "execution helper"])
 
 if 'stage' not in st.session_state:
+    authentification_sidebar()
+    st.session_state.parameters = load_parameters()
+    parameter_override()
+    st.session_state.database = SqlApi(name=st.session_state.parameters['input_data']['database'],
+                                       pool_size=st.session_state.parameters['input_data']['async']['pool_size'],
+                                       max_overflow=st.session_state.parameters['input_data']['async']['max_overflow'],
+                                       pool_recycle=st.session_state.parameters['input_data']['async']['pool_recycle'])
     st.session_state.stage = 0
 
 # load whitelisted protocols from yaml
@@ -216,6 +215,7 @@ with grid_tab:
 
             metrics = st.selectbox('Metrics', metric_fields, index=0)
 
+            st.subheader("Filtering", divider='grey')
             filtering_options = [field for field in fields if field not in [X, Y] + metric_fields]
             filtering = {
                 field: st.selectbox(
