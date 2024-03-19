@@ -240,12 +240,14 @@ class FilteredDefiLlama(DefiLlama):
         progress_bar.increment(text=fetch_message)
         return result.set_index('date')
 
-    def refresh_apy_history(self, fetch_summary: dict, progress_bar: MyProgressBar, populate_db: bool = False,) -> FileData:
+    def refresh_apy_history(self, progress_bar: MyProgressBar, populate_db: bool = False,) -> tuple[FileData, dict]:
         if not populate_db:
             list_table = self.sql_api.list_tables()
             fetch_summary = {name: ('skipped (not in db)', None)
-                             for name in self.pools[ 'name'] if name not in list_table}
+                             for name in self.pools['name'] if name not in list_table}
             self.pools = self.pools[self.pools['name'].isin(list_table)]
+        else:
+            fetch_summary = {}
         metadata = [x.to_dict() for _, x in self.pools.iterrows()]
         coros = [self.apy_history(meta,
                                   fetch_summary=fetch_summary,
@@ -255,7 +257,7 @@ class FilteredDefiLlama(DefiLlama):
         # remove failed pools and update updated_time
         self.pools = self.pools[self.pools['name'].apply(lambda pool: fetch_summary[pool][0] != 'error')]
         self.pools['updated'] = self.pools['name'].apply(lambda pool: fetch_summary[pool][1])
-        return FileData({key['name']: value for key, value in zip(metadata, data) if not value.empty})
+        return FileData({key['name']: value for key, value in zip(metadata, data) if not value.empty}), fetch_summary
 
     async def fetch_oracle(self, metadata, pool_history):
         if metadata['underlyingTokens'] is not None:

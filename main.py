@@ -26,10 +26,10 @@ st.title('Yield optimizer backtest \n by Sety')
 initialize_tab, backtest_tab, analytics_tab, grid_tab, execution_tab = st.tabs(
     ["pool selection", "backtest", "backtest analytics", "grid analytics", "execution helper"])
 
+authentification_sidebar()
+st.session_state.parameters = load_parameters()
+parameter_override()
 if 'stage' not in st.session_state:
-    authentification_sidebar()
-    st.session_state.parameters = load_parameters()
-    parameter_override()
     st.session_state.database = SqlApi(name=st.session_state.parameters['input_data']['database'],
                                        pool_size=st.session_state.parameters['input_data']['async']['pool_size'],
                                        max_overflow=st.session_state.parameters['input_data']['async']['max_overflow'],
@@ -120,8 +120,7 @@ with initialize_tab:
                 progress_bar = MyProgressBar(value=0.0,
                                              length=st.session_state.defillama.pools.shape[0],
                                              text="Fetching data")
-                fetch_summary = {}
-                st.session_state.all_history = st.session_state.defillama.refresh_apy_history(fetch_summary=fetch_summary, progress_bar=progress_bar, populate_db=populate_db)
+                st.session_state.all_history, fetch_summary = st.session_state.defillama.refresh_apy_history(progress_bar=progress_bar, populate_db=populate_db)
                 st.session_state.stage = 4
                 errors = len([x for x in fetch_summary if "error" in fetch_summary[x][0]])
                 progress_bar.progress_bar.progress(value=1.0, text=f'Fetched {len([x for x in fetch_summary if ("Added" in fetch_summary[x][0]) or ("Created" in fetch_summary[x][0])])} pools \n'
