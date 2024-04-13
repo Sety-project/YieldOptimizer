@@ -84,9 +84,9 @@ class FilteredDefiLlama(DefiLlama):
     '''
     filters protocols and pools from defillama
     '''
-    pegged_symbols = {'usd': ['usdt', 'usdc', 'dai', 'frax', 'lusd', 'mim', 'susd', 'fraxbp', 'mkusd', 'dola', 'usdc.e'],
+    pegged_symbols = {'usd': ['usdt', 'usdc', 'dai', 'frax', 'lusd', 'mim', 'susd', 'fraxbp', 'mkusd', 'dola', 'usdc.e', 'susde', 'usdbc', 'sexydai'],
                       'eth': ['weth', 'eth', 'steth', 'wsteth', 'reth', 'reth2', 'frxeth', 'sfrxeth', 'sweth', 'cbeth',
-                              'oeth'],
+                              'oeth','oseth', 'ezeth', 'weeth', 'apxeth', 'pteeth', 'ptezeth', 'ptezeth'],
                       'btc': ['wbtc']}
 
     def __init__(self, reference_asset: str, chains: list[str], oracle,
@@ -137,8 +137,8 @@ class FilteredDefiLlama(DefiLlama):
             protocols = protocols[(protocols['tvl'] >= kwargs['tvl']) | (protocols['name'] == 'merkl')]
         if 'listedAt' in kwargs:
             protocols = protocols[(protocols['listedAt'].fillna(1e11).apply(date.fromtimestamp) <= kwargs['listedAt'])]
-        if 'category' in kwargs:
-            protocols = protocols[~protocols['category'].isin(kwargs['category'])]
+        if 'categories' in kwargs:
+            protocols = protocols[protocols['category'].isin(kwargs['categories'])]
         if selected_protocols is not None:
             protocols = protocols[protocols['name'].isin(selected_protocols)]
 
