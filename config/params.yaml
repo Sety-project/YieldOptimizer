@@ -11,7 +11,7 @@ input_data:
     pool_tvl_threshold: 10e6
     use_oracle: false
   async:
-    gather_limit: 1
+    gather_limit: 15
     pool_size: 10
     max_overflow: 20
     pool_recycle: 3600
@@ -45,8 +45,8 @@ label_map:
 strategy:
   cost: 0.0005 # 1e-4 is a bp
   gas: 0 # in $
-  base_buffer: 0.1 # relative to wealth
-  concentration_limit: 0.7
+  base_buffer: 0. # relative to wealth
+  concentration_limit: 1/19
   initial_wealth: 1000000
   solver_params:
     solver: "ECOS"

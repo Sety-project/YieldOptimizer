@@ -113,6 +113,8 @@ with initialize_tab:
                                          use_container_width=True, hide_index=True)
 
             populate_db = st.checkbox("Populate DB (slow !)", value=False)
+            if populate_db:
+                st.session_state.parameters['input_data']['async']['gather_limit'] = 1
             if st.form_submit_button("Predict pool yield"):
                 st.session_state.defillama.pools = st.session_state.defillama.pools[edited_meta['selected']]
                 st.session_state.stage = 3
@@ -173,8 +175,7 @@ with backtest_tab:
             if st.form_submit_button("Run backtest") and override_grid is not None:
                 st.session_state.result = VaultBacktestEngine.run_grid(parameter_grid=override_grid,
                                                                        parameters=st.session_state.parameters,
-                                                                       data=
-                                                                       st.session_state.all_history)
+                                                                       data=st.session_state.all_history)
                 st.session_state.stage = 5
         st.subheader("Backtest grid", divider='grey')
         st.json(override_grid)
