@@ -10,6 +10,9 @@ underlyings:
   - fraxbp
   - mkusd
   - dola
+  - usdbc
+  - susdce
+  - sexydai
 protocols:
   - curve-dex
   - balancer
@@ -38,3 +41,7 @@ protocols:
   - pancakeswap-amm-v3
   - spark
   - extra-finance
+  - morpho-blue
+  - moonwell
+  - lodestar
+  - silo
