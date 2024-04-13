@@ -72,21 +72,16 @@ def prompt_initialization():
     return use_oracle, reference_asset, chains
 
 
-def prompt_protocol_filtering(all_categories,
-                              my_categories=['Liquid Staking', 'Bridge', 'Lending', 'CDP', 'Dexes', 'RWA', 'Yield',
-                                             'Farm', 'Synthetics',
-                                             'Staking Pool', 'Derivatives', 'Yield Aggregator', 'Insurance',
-                                             'Liquidity manager', 'Algo-Stables',
-                                             'Decentralized Stablecoin', 'NFT Lending', 'Leveraged Farming', 'Restaking', 'RWA Lending']) -> dict:
-    def reset():
-        st.session_state.stage = 1
-    result = dict()
+def prompt_protocol_filtering(all_categories) -> dict:
+    result = {}
     result['tvl'] = st.number_input("tvl threshold (in k$)", value=1000, help="minimum tvl to include in universe")*1000
 
-    categories = st.multiselect("categories", default=my_categories,
+    categories = st.multiselect("categories",
+                                default=None,
+                                placeholder="all",
                                 options=all_categories,
                                 help="select categories to include in universe")
-    result['categories'] = categories
+    result['categories'] = categories or all_categories
 
     # listedAt = st.slider("listedAt",
     #                      min_value=date.fromtimestamp(st.session_state.defillama.protocols['listedAt'].dropna().min()),
@@ -99,13 +94,18 @@ def prompt_protocol_filtering(all_categories,
     return result
 
 
-def prompt_pool_filtering() -> dict:
-    def reset():
-        st.session_state.stage = 2
-    result = dict()
-    result['tvlUsd'] = st.number_input("tvl threshold (in k$)", value=100, help="minimum tvl to include in universe")*1000
-    result['apy'] = st.number_input("apy threshold", value=2., help="minimum apy to include in universe")
-    result['apyMean30d'] = st.number_input("apyMean30d threshold", value=2., help="minimum apyMean30d to include in universe")
+def prompt_pool_filtering(reference_asset: str=None) -> dict:
+    defaults_map = {'usd': {'apy': 3.0, 'apyMean30d': 3.0, 'tvlUsd': 1000},
+                    'eth': {'apy': 0.0, 'apyMean30d': 0.0, 'tvlUsd': 1000},
+                    'btc': {'apy': 0.0, 'apyMean30d': 0.0, 'tvlUsd': 1000}}
+    result = {}
+    # TODO: bad bug in streamlit, can't use defaults_map[reference_asset] as default value -> "DuplicateWidgetID: There are multiple identical st.number_input widgets with the same generated key."
+    # result['tvlUsd'] = st.number_input("tvl threshold (in k$)", value=defaults_map[reference_asset]['tvlUsd'], help="minimum tvl to include in universe")*1000
+    # result['apy'] = st.number_input("apy threshold", value=defaults_map[reference_asset]['apy'], help="minimum apy to include in universe")
+    # result['apyMean30d'] = st.number_input("apyMean30d threshold", value=defaults_map[reference_asset]['apyMean30d'], help="minimum apyMean30d to include in universe")
+    result['tvlUsd'] = st.number_input("tvl threshold (in k$)", value=100., help="minimum tvl to include in universe")*1000
+    result['apy'] = st.number_input("apy threshold", value=0., help="minimum apy to include in universe")
+    result['apyMean30d'] = st.number_input("apyMean30d threshold", value=0., help="minimum apyMean30d to include in universe")
 
     return result
 
