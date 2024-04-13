@@ -56,7 +56,7 @@ class VaultBacktestEngine:
 
         progress_bar1.progress_bar.status = 'completed'
         if progress_bar2:
-            progress_bar2.increment(text=f'Ran {1+int(progress_bar2.progress_idx)} out of {progress_bar2.length}')
+            progress_bar2.increment(text=f'Running backtest {1+int(progress_bar2.progress_idx)} / {progress_bar2.length}')
         return {'result': result,
                 'perf': VaultBacktestEngine.perf_analysis(result)}
 
@@ -67,7 +67,7 @@ class VaultBacktestEngine:
             - runs = dict of backtest results for each parameter_grid
             - grid = performance metrics for all runs: perf, tx_cost, avg gini
         '''
-        progress_bar2 = MyProgressBar(length=len(parameter_grid), value=0.0, text='Running backtest...')
+        progress_bar2 = MyProgressBar(length=len(parameter_grid), value=0.0, text=f'Running backtest 1 /{len(parameter_grid)}')
 
         params = [modify_target_with_argument(parameters, cur_params_override)
                   for cur_params_override in parameter_grid]
@@ -75,6 +75,7 @@ class VaultBacktestEngine:
                  for cur_params_override in parameter_grid]
         results = [VaultBacktestEngine.run(parameters=param, data=data, progress_bar2=progress_bar2)
                    for param in params]
+        progress_bar2.progress_bar.status = 'completed'
 
         perfs = pd.DataFrame([pd.concat([pd.Series(cur_params_override), result['perf']]) for cur_params_override, result in zip(parameter_grid, results)])
         runs = {name: result['result'] for name, result in zip(names, results)}
