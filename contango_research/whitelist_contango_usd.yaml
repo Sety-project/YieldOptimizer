@@ -1,0 +1,23 @@
+underlyings:
+  - usdc
+  - usdc.e
+  - dai
+  - lusd
+  - susd
+  - usdbc
+  - susdce
+  - sexydai
+protocols:
+  - aave-v2
+  - morpho-aavev3
+  - morpho-compound
+  - compound-v3
+  - morpho-aave
+  - compound
+  - aave-v3
+  - spark
+  - morpho-blue
+  - moonwell
+  - lodestar
+  - silo
+  - sonne
