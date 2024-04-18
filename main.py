@@ -147,18 +147,29 @@ with backtest_tab:
         with st.form("backtest_form"):
             st.session_state.parameters['backtest']['end_date'] = date.today().isoformat()
             st.session_state.parameters['backtest']['start_date'] = (date.today() - timedelta(days=90)).isoformat()
-            default_parameters = extract_from_paths(target=st.session_state.parameters,
-                                                    paths=['strategy.initial_wealth',
-                                                           'run_parameters.models.apy.TrivialEwmPredictor.params.cap',
-                                                           'run_parameters.models.apy.TrivialEwmPredictor.params.halflife',
-                                                           'strategy.cost',
-                                                           'strategy.gas',
-                                                           'strategy.base_buffer',
-                                                           "run_parameters.models.apy.TrivialEwmPredictor.params.horizon",
-                                                           "label_map.apy.horizons",
-                                                           "strategy.concentration_limit",
-                                                           "backtest.end_date",
-                                                           "backtest.start_date"])
+            if list(st.session_state.parameters['run_parameters']['models']['apy'].keys()) == ['ForesightPredictor']:
+                default_parameters = extract_from_paths(target=st.session_state.parameters,
+                                                        paths=['strategy.initial_wealth',
+                                                               'strategy.cost',
+                                                               'strategy.gas',
+                                                               'strategy.base_buffer',
+                                                               "label_map.apy.horizons",
+                                                               "strategy.concentration_limit",
+                                                               "backtest.end_date",
+                                                               "backtest.start_date"])
+            else:
+                default_parameters = extract_from_paths(target=st.session_state.parameters,
+                                                        paths=['strategy.initial_wealth',
+                                                               'run_parameters.models.apy.TrivialEwmPredictor.params.cap',
+                                                               'run_parameters.models.apy.TrivialEwmPredictor.params.halflife',
+                                                               'strategy.cost',
+                                                               'strategy.gas',
+                                                               'strategy.base_buffer',
+                                                               "run_parameters.models.apy.TrivialEwmPredictor.params.horizon",
+                                                               "label_map.apy.horizons",
+                                                               "strategy.concentration_limit",
+                                                               "backtest.end_date",
+                                                               "backtest.start_date"])
 
             if uploaded_file := st.file_uploader("Upload a set of backtest parameters (download template above)", type=['yaml']):
                 override_grid = yaml.safe_load(uploaded_file)

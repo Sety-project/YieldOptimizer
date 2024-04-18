@@ -361,6 +361,28 @@ class TrivialEwmPredictor(sklearn.base.BaseEstimator):
         # self.distribution = multivariate_normal(mean=mean, cov=cov, allow_singular=True)
 
 
+class ForesightPredictor(sklearn.base.BaseEstimator):
+    def __init__(self, horizon: timedelta):
+        self.horizon = pd.Timedelta(horizon).days
+        self.apy: pd.DataFrame = pd.DataFrame()
+        self.tvl: pd.DataFrame = pd.DataFrame()
+
+    def predict(self, index: datetime) -> tuple[np.array, np.array]:
+        '''returns APYs and tvls (used to estimate dilution)'''
+        return self.apy.loc[index].values, self.tvl.loc[index].values
+
+    def fit(self, raw_X: pd.DataFrame) -> None:
+        '''
+        precompute, for speed
+        '''
+        apy_X = raw_X.xs(level=('feature', 'window'), key=('apy', 'as_is'), axis=1).ffill().fillna(0.0)
+        apy_X.index = [pd.to_datetime(x, unit='ns', utc=True) for x in raw_X.index]
+        self.apy = apy_X.rolling(window=self.horizon).mean().shift(-self.horizon).ffill().fillna(0.0)
+        self.tvl = raw_X.xs(level=('feature', 'window'), key=('tvl', 'as_is'), axis=1).ffill().fillna(0.0)
+
+        return
+
+
 class DefillamaResearchEngine(ResearchEngine):
     '''
     simple ewma predictor for yield
@@ -391,11 +413,11 @@ class DefillamaResearchEngine(ResearchEngine):
             # for each model for that feature...
             if raw_feature not in self.run_parameters['models']:
                 continue
+            split_index = 0
             for model_name, model_params in self.run_parameters['models'][raw_feature].items():
                 model_obj = globals()[model_name](**model_params['params'])
                 # no fit needed for trivial model
                 model_obj.fit(self.X)
-                split_index = 0
                 self.fitted_model[(raw_feature, frequency, model_name, split_index)] = copy.deepcopy(model_obj)
 
 
