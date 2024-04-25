@@ -26,6 +26,9 @@ run_parameters:
           cap: 3 # stdev threshold of outlier yield
           halflife: 7d # ewm window for prediction
           horizon: 99y # horizon for depeg conversion to apy
+#      ForesightPredictor:
+#        params:
+#          horizon: 5d
   use_cache: false
   unit_test: false
 feature_map: # each feature present here will be transformed. times are in days.
@@ -41,12 +44,12 @@ feature_map: # each feature present here will be transformed. times are in days.
 label_map:
   apy:
     horizons: # only first is used for now
-      - 28
+      - 5
 strategy:
   cost: 0.0005 # 1e-4 is a bp
   gas: 0 # in $
-  base_buffer: 0. # relative to wealth
-  concentration_limit: 1/19
+  base_buffer: 0.01 # relative to wealth
+  concentration_limit: 1.0
   initial_wealth: 1000000
   solver_params:
     solver: "ECOS"

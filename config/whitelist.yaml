@@ -1,3 +1,10 @@
+chains:
+  - Arbitrum
+  - Optimism
+  - Base
+  - Polygon
+  - xDai
+  - Ethereum
 underlyings:
   - usdt
   - usdc
