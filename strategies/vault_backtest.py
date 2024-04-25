@@ -109,7 +109,7 @@ class VaultBacktestEngine:
             temp.loc['total', col] = (temp[col] * temp['weights']).sum() / temp['weights'].apply(lambda x: np.clip(x, a_min= 1e-8, a_max=None)).sum()
         temp.loc['total', 'weights'] = prev_state.wealth - weights.sum()
 
-        predict_horizon = rebalancing_strategy.research_engine.label_map['apy']['horizons'][0]
+        predict_horizon = rebalancing_strategy.research_engine.label_map['apy']['horizons']
         pnl = pd.DataFrame({'pnl':
                                 {'wealth': prev_state.wealth,
                                  'gas': step_results['gas'],

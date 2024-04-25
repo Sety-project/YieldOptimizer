@@ -252,19 +252,19 @@ class ResearchEngine:
             # record performance for use in backtest
             self.performance[instrument] = file_data[instrument]['close']
 
-            for horizon in label_map[raw_feature]['horizons']:
-                future_perf = (file_data[instrument]['close'].shift(-horizon - ResearchEngine.execution_lag) / file_data[instrument]['close'].shift(-ResearchEngine.execution_lag)).apply(np.log)
-                if raw_feature == 'quantized_zscore':
-                    z_score = future_perf / future_perf.shift(horizon).rolling(50*horizon).std()
+            horizon = label_map[raw_feature]['horizons']
+            future_perf = (file_data[instrument]['close'].shift(-horizon - ResearchEngine.execution_lag) / file_data[instrument]['close'].shift(-ResearchEngine.execution_lag)).apply(np.log)
+            if raw_feature == 'quantized_zscore':
+                z_score = future_perf / future_perf.shift(horizon).rolling(50*horizon).std()
 
-                    def quantized(x,buckets=label_map[raw_feature]['stdev_buckets']):
-                        return next((key for key,values in buckets.items() if values[0] < x <= values[1]), np.NaN)
-                    temp = z_score.apply(quantized).dropna()
-                else:
-                    raise NotImplementedError
+                def quantized(x,buckets=label_map[raw_feature]['stdev_buckets']):
+                    return next((key for key,values in buckets.items() if values[0] < x <= values[1]), np.NaN)
+                temp = z_score.apply(quantized).dropna()
+            else:
+                raise NotImplementedError
 
-                feature = (instrument, raw_feature, horizon)
-                result[feature] = remove_duplicate_rows(temp).rename(feature)
+            feature = (instrument, raw_feature, horizon)
+            result[feature] = remove_duplicate_rows(temp).rename(feature)
 
         return result
 
@@ -396,10 +396,10 @@ class DefillamaResearchEngine(ResearchEngine):
         '''
         result: Data = Data(dict())
         for instrument, raw_feature in itertools.product(file_data.keys(), label_map.keys()):
-            for horizon in label_map[raw_feature]['horizons']:
-                temp = self.performance[instrument].rolling(window=horizon).mean().shift(-horizon)
-                feature = (instrument, raw_feature, horizon)
-                result[feature] = remove_duplicate_rows(temp).rename(feature)
+            horizon = label_map[raw_feature]['horizons']
+            temp = self.performance[instrument].rolling(window=horizon).mean().shift(-horizon)
+            feature = (instrument, raw_feature, horizon)
+            result[feature] = remove_duplicate_rows(temp).rename(feature)
 
         return result
 

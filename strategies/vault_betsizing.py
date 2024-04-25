@@ -45,13 +45,7 @@ class VaultRebalancingStrategy(ABC):
 
         if 'cost' in params:
             self.cost_wealth = np.full(N, params['cost'])
-            assumed_holding_days = research_engine.label_map['apy']['horizons']
-            if len(assumed_holding_days) > 1:
-                raise NotImplementedError
-            if assumed_holding_days[0] is not None:
-                self.cost_optimization = np.full(N, params['cost']/(assumed_holding_days[0]/365.0))
-            else:
-                self.cost_optimization = np.zeros(N)
+            self.cost_optimization = np.full(N, params['cost']/(research_engine.label_map['apy']['horizons']/365.0))
         else:
             raise NotImplementedError
 
@@ -266,7 +260,7 @@ class YieldStrategy(VaultRebalancingStrategy):
         assert (predicted_APY >= 0).all(), "gas_reduction_routine assumes positive APY"
 
         new_chg = copy.deepcopy(weights_chg)
-        expected_dollar_chg = predicted_APY * weights_chg * self.research_engine.label_map['apy']['horizons'][0] / 365
+        expected_dollar_chg = predicted_APY * weights_chg * self.research_engine.label_map['apy']['horizons'] / 365
         ordering_by_chg = sorted(range(len(expected_dollar_chg)), key=lambda i: expected_dollar_chg[i], reverse=True)
         chg_of_chg = 0
         for i in ordering_by_chg:

@@ -1,7 +1,6 @@
 - backtest.end_date: '1D'
   backtest.start_date: '180D'
-  label_map.apy.horizons:
-    - 10
+  label_map.apy.horizons: 10
   run_parameters.models.apy.TrivialEwmPredictor.params.cap: 3
   run_parameters.models.apy.TrivialEwmPredictor.params.halflife: 3d
   run_parameters.models.apy.TrivialEwmPredictor.params.horizon: 10d
