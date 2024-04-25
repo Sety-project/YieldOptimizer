@@ -66,7 +66,7 @@ def prompt_initialization():
                                    help="What asset you are investing", on_change=reset)
 
     top_chains = coingecko.address_map.count().sort_values(ascending=False).index[2:]
-    chains = st.multiselect("chains", options=top_chains, default=['Arbitrum', 'Optimism', 'Ethereum'],
+    chains = st.multiselect("chains", options=top_chains, default=['Arbitrum', 'Optimism', 'Base', 'Polygon', 'Ethereum'],
                             help="select chains to include", on_change=reset)
 
     return use_oracle, reference_asset, chains

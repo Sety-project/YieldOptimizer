@@ -85,7 +85,7 @@ with initialize_tab:
                 with upload_col:
                     st.subheader("Upload", divider='grey')
                     whitelist_file = st.file_uploader(
-                            "Upload a set of whitelisted underlyings and protocols (download template above)",
+                            "Upload a set of whitelisted chains, protocols and underlyings (download template above)",
                             type=['yaml'], key='whitelist_file')
                 with pool_col:
                     st.subheader("Pool filter", divider='grey')
@@ -100,7 +100,8 @@ with initialize_tab:
                         st.session_state.defillama.filter(
                             underlyings=whitelist['underlyings'],
                             protocol_filters={'selected_protocols': whitelist['protocols']},
-                            pool_filters=pool_filters)
+                            pool_filters=pool_filters,
+                            chains=whitelist['chains'])
                         st.write(
                             f"found {len(st.session_state.defillama.pools)} pools among {len(st.session_state.defillama.protocols)} protocols")
                         st.session_state.stage = 2
