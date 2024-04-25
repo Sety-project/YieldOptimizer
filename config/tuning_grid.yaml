@@ -1,7 +1,6 @@
 - backtest.end_date: '1D'
   backtest.start_date: '180D'
-  label_map.apy.horizons:
-    - 5
+  label_map.apy.horizons: 5
   run_parameters.models.apy.TrivialEwmPredictor.params.cap: 3
   run_parameters.models.apy.TrivialEwmPredictor.params.halflife: 3d
   run_parameters.models.apy.TrivialEwmPredictor.params.horizon: 10d
@@ -12,8 +11,7 @@
   strategy.initial_wealth: 100000.0
 - backtest.end_date: '1D'
   backtest.start_date: '180D'
-  label_map.apy.horizons:
-    - 5
+  label_map.apy.horizons: 5
   run_parameters.models.apy.TrivialEwmPredictor.params.cap: 3
   run_parameters.models.apy.TrivialEwmPredictor.params.halflife: 3d
   run_parameters.models.apy.TrivialEwmPredictor.params.horizon: 10d
@@ -24,8 +22,7 @@
   strategy.initial_wealth: 1000000.0
 - backtest.end_date: '1D'
   backtest.start_date: '180D'
-  label_map.apy.horizons:
-    - 5
+  label_map.apy.horizons: 5
   run_parameters.models.apy.TrivialEwmPredictor.params.cap: 3
   run_parameters.models.apy.TrivialEwmPredictor.params.halflife: 3d
   run_parameters.models.apy.TrivialEwmPredictor.params.horizon: 10d
@@ -36,8 +33,7 @@
   strategy.initial_wealth: 10000000.0
 - backtest.end_date: '1D'
   backtest.start_date: '180D'
-  label_map.apy.horizons:
-    - 10
+  label_map.apy.horizons: 10
   run_parameters.models.apy.TrivialEwmPredictor.params.cap: 3
   run_parameters.models.apy.TrivialEwmPredictor.params.halflife: 5d
   run_parameters.models.apy.TrivialEwmPredictor.params.horizon: 10d
@@ -48,8 +44,7 @@
   strategy.initial_wealth: 100000.0
 - backtest.end_date: '1D'
   backtest.start_date: '180D'
-  label_map.apy.horizons:
-    - 10
+  label_map.apy.horizons: 10
   run_parameters.models.apy.TrivialEwmPredictor.params.cap: 3
   run_parameters.models.apy.TrivialEwmPredictor.params.halflife: 5d
   run_parameters.models.apy.TrivialEwmPredictor.params.horizon: 10d
@@ -60,8 +55,7 @@
   strategy.initial_wealth: 1000000.0
 - backtest.end_date: '1D'
   backtest.start_date: '180D'
-  label_map.apy.horizons:
-    - 10
+  label_map.apy.horizons: 10
   run_parameters.models.apy.TrivialEwmPredictor.params.cap: 3
   run_parameters.models.apy.TrivialEwmPredictor.params.halflife: 5d
   run_parameters.models.apy.TrivialEwmPredictor.params.horizon: 10d
@@ -72,8 +66,7 @@
   strategy.initial_wealth: 10000000.0
 - backtest.end_date: '1D'
   backtest.start_date: '180D'
-  label_map.apy.horizons:
-    - 10
+  label_map.apy.horizons: 10
   run_parameters.models.apy.TrivialEwmPredictor.params.cap: 3
   run_parameters.models.apy.TrivialEwmPredictor.params.halflife: 3d
   run_parameters.models.apy.TrivialEwmPredictor.params.horizon: 10d
@@ -84,8 +77,7 @@
   strategy.initial_wealth: 100000.0
 - backtest.end_date: '1D'
   backtest.start_date: '180D'
-  label_map.apy.horizons:
-    - 10
+  label_map.apy.horizons: 10
   run_parameters.models.apy.TrivialEwmPredictor.params.cap: 3
   run_parameters.models.apy.TrivialEwmPredictor.params.halflife: 3d
   run_parameters.models.apy.TrivialEwmPredictor.params.horizon: 10d
@@ -96,8 +88,7 @@
   strategy.initial_wealth: 1000000.0
 - backtest.end_date: '1D'
   backtest.start_date: '180D'
-  label_map.apy.horizons:
-    - 10
+  label_map.apy.horizons: 10
   run_parameters.models.apy.TrivialEwmPredictor.params.cap: 3
   run_parameters.models.apy.TrivialEwmPredictor.params.halflife: 3d
   run_parameters.models.apy.TrivialEwmPredictor.params.horizon: 10d
