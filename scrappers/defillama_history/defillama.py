@@ -110,7 +110,10 @@ class FilteredDefiLlama(DefiLlama):
 
     def filter(self, underlyings: list,
                protocol_filters: dict,
-               pool_filters: dict) -> None:
+               pool_filters: dict,
+               chains: list = None) -> None:
+        if chains:
+            self.chains = chains
         self.protocols = self.filter_protocols(**protocol_filters)
         self.shortlisted_tokens = self.filter_underlyings(underlyings)
         self.pools = self.filter_pools(**pool_filters)
