@@ -169,13 +169,18 @@ def display_single_backtest(run_idx: str) -> None:
     # show avg over backtest
     details = dict()
     year_fraction = (backtest.index.max() - backtest.index.min()).total_seconds()/24/3600/365.25
-    details['gas_apy'] = -100 * backtest[('pnl', 'gas')].sum() / backtest[('pnl', 'wealth')].mean() / year_fraction
-    details['slippage_apy'] = -100 * backtest[('pnl', 'tx_cost')].sum() / backtest[('pnl', 'wealth')].mean() / year_fraction
+    details['gas_apy'] = -backtest[('pnl', 'gas')].sum() / backtest[('pnl', 'wealth')].mean() / year_fraction
+    details['slippage_apy'] = - backtest[('pnl', 'tx_cost')].sum() / backtest[('pnl', 'wealth')].mean() / year_fraction
+    details['tracking_error_apy'] = backtest[('pnl', 'tracking_error')].mean() / backtest[
+        ('pnl', 'wealth')].mean()
     details['nb trade per d'] = backtest[('pnl', 'gas')].sum() /  params['strategy.gas'] / year_fraction / 365.25
-    details['churn (nb of days to trade 100% capital)'] = 365.25 * year_fraction /(-details['slippage_apy']/100 / params['strategy.cost'])
+    details['churn (nb of days to trade 100% capital)'] = 365.25 * year_fraction /(-details['slippage_apy'] / params['strategy.cost'])
+
 
     st.subheader(f'total apy = {avg_apy["apy"].sum()/100:.1%}')
-    st.table(details)
+    st.table({col: f'{x:.01%}'
+                                            if col in ['gas_apy', 'slippage_apy', 'tracking_error_apy']
+                                            else f'{x:.1f}' for col, x in details.items()})
     st.plotly_chart(
         px.pie(truncated_avg_apy, names='pool', values='apy', title='apy * weights (%)', height=height / 2,
                width=width / 2))

@@ -101,6 +101,7 @@ class VaultBacktestEngine:
         temp['apy'] = apy.loc[index].values
         temp['apyReward'] = apyReward.loc[index].values
         temp['dilutor'] = step_results['dilutor']
+        temp['tracking_error'] = (temp['weights'] *(apy.shift(-1).loc[index] - temp['pred_apy']))
 
         temp = pd.DataFrame(temp).fillna(0.0)
         temp.index = self.performance.columns
@@ -108,16 +109,15 @@ class VaultBacktestEngine:
         for col in ['apy', 'apyReward', 'pred_apy']:
             temp.loc['total', col] = (temp[col] * temp['weights']).sum() / temp['weights'].apply(lambda x: np.clip(x, a_min= 1e-8, a_max=None)).sum()
         temp.loc['total', 'weights'] = prev_state.wealth - weights.sum()
+        temp.loc['total', 'tracking_error'] = temp['tracking_error'].sum()
 
-        predict_horizon = rebalancing_strategy.research_engine.label_map['apy']['horizons']
+        predict_horizon = 1 #rebalancing_strategy.research_engine.label_map['apy']['horizons']
         pnl = pd.DataFrame({'pnl':
                                 {'wealth': prev_state.wealth,
                                  'gas': step_results['gas'],
                                  'tx_cost': step_results['transaction_costs'],
-                                 'tracking_error': np.dot(prev_state.weights,
-                                                          apy.rolling(predict_horizon).mean().shift(
-                                                              -predict_horizon).loc[index] - predicted_apys)
-                                                   / max(1e-8, sum(prev_state.weights))}})
+                                 'tracking_error': temp.loc['total', 'tracking_error']
+                                 }})
         new_entry: pd.Series = pd.concat([temp.unstack(), pnl.unstack()], axis=0)
         new_entry.name = index
         return new_entry
